@@ -1,0 +1,24 @@
+[Unit]
+Description=Slack Bot for LED Display
+After=network.target led-service.service
+
+[Service]
+Type=simple
+WorkingDirectory=${WORKING_DIR}
+ExecStart=${BINDIR}/${BINARY_NAME}
+Restart=always
+RestartSec=5
+
+# Environment variables
+Environment=SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN}
+Environment=SLACK_APP_TOKEN=${SLACK_APP_TOKEN}
+Environment=SLACK_BOT_FONT=${SLACK_BOT_FONT}
+Environment=SLACK_BOT_GRPC_ADDR=${SLACK_BOT_GRPC_ADDR}
+Environment=SLACK_BOT_GRPC_CONNECT_TIMEOUT_SECONDS=${SLACK_BOT_GRPC_CONNECT_TIMEOUT_SECONDS}
+Environment=SLACK_BOT_IMAGE_DURATION=${SLACK_BOT_IMAGE_DURATION}
+Environment=SLACK_BOT_EMOJI_LIST_CACHE_TTL_SECONDS=${SLACK_BOT_EMOJI_LIST_CACHE_TTL_SECONDS}
+Environment=SLACK_BOT_EMOJI_IMAGE_CACHE_TTL_SECONDS=${SLACK_BOT_EMOJI_IMAGE_CACHE_TTL_SECONDS}
+Environment=DEBUG=${DEBUG}
+
+[Install]
+WantedBy=default.target
