@@ -49,7 +49,7 @@ func NewImageClient(addr string, connectTimeout, opTimeout time.Duration, logger
 
 	conn, err := grpc.DialContext(ctx, addr, dialOptions...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to gRPC server at %s: %w", addr, err)
+		return nil, fmt.Errorf("failed to connect to gRPC server within timeout at %s: %w", addr, err)
 	}
 
 	logger.Info("Successfully connected to gRPC server", slog.String("addr", addr))
@@ -112,7 +112,9 @@ func (c *ImageClient) SendImage(ctx context.Context, imageData []byte, mimeType 
 // Close closes the underlying gRPC connection.
 func (c *ImageClient) Close() error {
 	if c.conn != nil {
-		c.logger.Info("Closing gRPC connection")
+		if c.logger != nil {
+			c.logger.Info("Closing gRPC connection")
+		}
 		return c.conn.Close()
 	}
 	return nil

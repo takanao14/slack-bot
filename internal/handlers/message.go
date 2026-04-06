@@ -167,10 +167,7 @@ func (h *MessageHandler) HandleEmojiChanged(ctx context.Context, ev *slackevents
 
 func (h *MessageHandler) processMessageImage(ctx context.Context, text string) error {
 	emojiMap := h.getEmojiMap(ctx)
-
-	resolver := func(name string) (image.Image, error) {
-		return h.resolveEmojiImage(ctx, emojiMap, name)
-	}
+	resolver := h.newEmojiResolver(ctx, emojiMap)
 
 	imageData, err := h.text2img.RenderTextWithEmoji(text, resolver)
 	if err != nil {
@@ -204,6 +201,12 @@ func (h *MessageHandler) processMessageImage(ctx context.Context, text string) e
 	return nil
 }
 
+func (h *MessageHandler) newEmojiResolver(ctx context.Context, emojiMap map[string]string) func(string) (image.Image, error) {
+	return func(name string) (image.Image, error) {
+		return h.resolveEmojiImage(ctx, emojiMap, name)
+	}
+}
+
 func (h *MessageHandler) resolveEmojiImage(ctx context.Context, emojiMap map[string]string, name string) (image.Image, error) {
 	imageCacheTTL := h.getEmojiImageCacheTTL()
 
@@ -216,6 +219,9 @@ func (h *MessageHandler) resolveEmojiImage(ctx context.Context, emojiMap map[str
 			h.logger.Debug("Emoji found in cache", slog.String("name", name))
 			return entry.img, nil
 		}
+		h.cacheMu.Lock()
+		delete(h.emojiCache, name)
+		h.cacheMu.Unlock()
 		h.logger.Debug("Emoji cache expired", slog.String("name", name))
 	}
 
@@ -265,13 +271,20 @@ func (h *MessageHandler) downloadAndDecodeEmoji(ctx context.Context, url, name s
 	return img, nil
 }
 
-func (h *MessageHandler) getEmojiMap(ctx context.Context) map[string]string {
+func (h *MessageHandler) getCachedEmojiMap() (map[string]string, bool) {
 	h.cacheMu.RLock()
 	cachedMap := h.emojiListCache
 	fetchedAt := h.emojiListFetchedAt
 	h.cacheMu.RUnlock()
 
 	if cachedMap != nil && time.Since(fetchedAt) < h.getEmojiListCacheTTL() {
+		return cachedMap, true
+	}
+	return nil, false
+}
+
+func (h *MessageHandler) getEmojiMap(ctx context.Context) map[string]string {
+	if cachedMap, ok := h.getCachedEmojiMap(); ok {
 		return cachedMap
 	}
 
