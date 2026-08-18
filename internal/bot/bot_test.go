@@ -388,10 +388,10 @@ func TestResolveBotIdentityStopsOnCanceledContext(t *testing.T) {
 func withFastAuthTestBackoff(t *testing.T) {
 	t.Helper()
 
-	initial, max := authTestInitialBackoff, authTestMaxBackoff
+	initial, maxBackoff := authTestInitialBackoff, authTestMaxBackoff
 	authTestInitialBackoff, authTestMaxBackoff = time.Millisecond, time.Millisecond
 	t.Cleanup(func() {
-		authTestInitialBackoff, authTestMaxBackoff = initial, max
+		authTestInitialBackoff, authTestMaxBackoff = initial, maxBackoff
 	})
 }
 
