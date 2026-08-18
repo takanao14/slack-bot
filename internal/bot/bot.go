@@ -215,7 +215,15 @@ func (b *Bot) handleEvent(ctx context.Context, evt socketmode.Event) {
 		b.config.Logger.Info("Connecting to Slack with Socket Mode...")
 
 	case socketmode.EventTypeConnectionError:
-		b.config.Logger.Error("Connection failed. Retrying later...")
+		attrs := []any{}
+		if ev, ok := evt.Data.(*slack.ConnectionErrorEvent); ok {
+			attrs = append(attrs,
+				slog.Any("error", ev.ErrorObj),
+				slog.Int("attempt", ev.Attempt),
+				slog.Duration("backoff", ev.Backoff),
+			)
+		}
+		b.config.Logger.Error("Connection failed, retrying", attrs...)
 
 	case socketmode.EventTypeConnected:
 		b.config.Logger.Info("Connected to Slack with Socket Mode")
@@ -226,11 +234,51 @@ func (b *Bot) handleEvent(ctx context.Context, evt socketmode.Event) {
 	case socketmode.EventTypeEventsAPI:
 		b.handleEventsAPI(ctx, evt)
 
+	// Slack regularly cycles connections; socketmode reconnects automatically.
+	case socketmode.EventTypeIncomingError:
+		b.config.Logger.Warn("Socket Mode connection error, reconnecting",
+			slog.Any("error", eventError(evt.Data)),
+		)
+
+	// Slack redelivers events whose acknowledgements fail.
+	case socketmode.EventTypeErrorWriteFailed:
+		attrs := []any{slog.Any("error", eventError(evt.Data))}
+		if ev, ok := evt.Data.(*socketmode.ErrorWriteFailed); ok && ev.Response != nil {
+			attrs = append(attrs, slog.String("envelope_id", ev.Response.EnvelopeID))
+		}
+		b.config.Logger.Error("Failed to send Socket Mode response, Slack will redeliver", attrs...)
+
+	// Bad messages do not close the connection.
+	case socketmode.EventTypeErrorBadMessage:
+		b.config.Logger.Warn("Received an unparsable Socket Mode message",
+			slog.Any("error", eventError(evt.Data)),
+		)
+
+	// Invalid auth stops socketmode.
+	case socketmode.EventTypeInvalidAuth:
+		b.config.Logger.Error("Slack rejected the app-level token, check SLACK_APP_TOKEN")
+
 	default:
 		b.config.Logger.Warn("Unexpected event type received",
 			slog.String("type", string(evt.Type)),
 			slog.Any("event", evt), // Log the full event for debugging
 		)
+	}
+}
+
+// eventError extracts errors from Socket Mode event payloads.
+func eventError(data any) error {
+	switch ev := data.(type) {
+	case *slack.IncomingEventError:
+		return ev.ErrorObj
+	case *socketmode.ErrorWriteFailed:
+		return ev.Cause
+	case *socketmode.ErrorBadMessage:
+		return ev.Cause
+	case error:
+		return ev
+	default:
+		return nil
 	}
 }
 

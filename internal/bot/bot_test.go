@@ -78,6 +78,17 @@ func (h *recordingHandler) hasEntryWithKey(message string, level slog.Level, key
 	return false
 }
 
+func (h *recordingHandler) find(message string) (recordedEntry, bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, e := range h.entries {
+		if e.message == message {
+			return e, true
+		}
+	}
+	return recordedEntry{}, false
+}
+
 func newTestBot(t *testing.T) (*Bot, *recordingHandler, *stubMessageHandler, *int) {
 	t.Helper()
 
@@ -200,6 +211,113 @@ func TestHandleEventsAPIUnhandledTypeAcksAndLogsTypeKey(t *testing.T) {
 	}
 	if !logs.hasEntryWithKey("Unhandled EventsAPI event type", slog.LevelDebug, "type") {
 		t.Fatal("expected debug log with type key")
+	}
+}
+
+// Socket Mode errors should use specific logs without dumping events.
+func TestHandleEventLogsSocketModeErrorsWithoutDumpingTheEvent(t *testing.T) {
+	cause := errors.New("websocket: close 1000 (normal)")
+
+	tests := []struct {
+		name      string
+		event     socketmode.Event
+		wantMsg   string
+		wantLevel slog.Level
+		wantErr   bool
+	}{
+		{
+			name:      "incoming error",
+			event:     socketmode.Event{Type: socketmode.EventTypeIncomingError, Data: &slack.IncomingEventError{ErrorObj: cause}},
+			wantMsg:   "Socket Mode connection error, reconnecting",
+			wantLevel: slog.LevelWarn,
+			wantErr:   true,
+		},
+		{
+			name: "write failed",
+			event: socketmode.Event{
+				Type: socketmode.EventTypeErrorWriteFailed,
+				Data: &socketmode.ErrorWriteFailed{Cause: cause, Response: &socketmode.Response{EnvelopeID: "d88ad92d"}},
+			},
+			wantMsg:   "Failed to send Socket Mode response, Slack will redeliver",
+			wantLevel: slog.LevelError,
+			wantErr:   true,
+		},
+		{
+			name:      "bad message",
+			event:     socketmode.Event{Type: socketmode.EventTypeErrorBadMessage, Data: &socketmode.ErrorBadMessage{Cause: cause}},
+			wantMsg:   "Received an unparsable Socket Mode message",
+			wantLevel: slog.LevelWarn,
+			wantErr:   true,
+		},
+		{
+			name:      "invalid auth",
+			event:     socketmode.Event{Type: socketmode.EventTypeInvalidAuth, Data: &slack.InvalidAuthEvent{}},
+			wantMsg:   "Slack rejected the app-level token, check SLACK_APP_TOKEN",
+			wantLevel: slog.LevelError,
+		},
+		{
+			name: "connection error",
+			event: socketmode.Event{
+				Type: socketmode.EventTypeConnectionError,
+				Data: &slack.ConnectionErrorEvent{Attempt: 2, Backoff: time.Second, ErrorObj: cause},
+			},
+			wantMsg:   "Connection failed, retrying",
+			wantLevel: slog.LevelError,
+			wantErr:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b, logs, _, _ := newTestBot(t)
+
+			b.handleEvent(context.Background(), tt.event)
+
+			entry, ok := logs.find(tt.wantMsg)
+			if !ok {
+				t.Fatalf("expected a log entry %q", tt.wantMsg)
+			}
+			if entry.level != tt.wantLevel {
+				t.Fatalf("expected level %v, got %v", tt.wantLevel, entry.level)
+			}
+			if _, dumped := entry.keys["event"]; dumped {
+				t.Fatal("expected no full event dump")
+			}
+			if _, hasErr := entry.keys["error"]; hasErr != tt.wantErr {
+				t.Fatalf("expected error key presence %v, got %v", tt.wantErr, hasErr)
+			}
+			if _, ok := logs.find("Unexpected event type received"); ok {
+				t.Fatal("expected the event not to fall through to the default branch")
+			}
+		})
+	}
+}
+
+func TestHandleEventConnectionErrorWithoutPayloadStillLogs(t *testing.T) {
+	b, logs, _, _ := newTestBot(t)
+
+	b.handleEvent(context.Background(), socketmode.Event{Type: socketmode.EventTypeConnectionError})
+
+	entry, ok := logs.find("Connection failed, retrying")
+	if !ok {
+		t.Fatal("expected connection failure to be logged without a payload")
+	}
+	if _, hasErr := entry.keys["error"]; hasErr {
+		t.Fatal("expected no error key when the payload is absent")
+	}
+}
+
+func TestEventErrorFallsBackToNilForUnknownPayloads(t *testing.T) {
+	if got := eventError("not an error"); got != nil {
+		t.Fatalf("expected nil for an unrecognized payload, got %v", got)
+	}
+	if got := eventError(nil); got != nil {
+		t.Fatalf("expected nil for a nil payload, got %v", got)
+	}
+
+	cause := errors.New("boom")
+	if got := eventError(cause); !errors.Is(got, cause) {
+		t.Fatalf("expected a plain error payload to pass through, got %v", got)
 	}
 }
 
