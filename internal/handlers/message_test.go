@@ -181,8 +181,77 @@ func TestImageCacheCanRemainValidWhenEmojiListCacheExpires(t *testing.T) {
 	}
 }
 
+func TestIsOwnPost(t *testing.T) {
+	identity := BotIdentity{UserID: "U08R6PTE4LA", BotID: "B08R6PTDHQA"}
+
+	tests := []struct {
+		name     string
+		identity BotIdentity
+		user     string
+		botID    string
+		want     bool
+	}{
+		{name: "own message carries user and bot id", identity: identity, user: "U08R6PTE4LA", botID: "B08R6PTDHQA", want: true},
+		{name: "own bot_message carries bot id only", identity: identity, user: "", botID: "B08R6PTDHQA", want: true},
+		{name: "human message", identity: identity, user: "U5E3582NN", want: false},
+		{name: "another bot", identity: identity, user: "UOTHERBOT", botID: "BOTHERBOT", want: false},
+		{name: "unknown identity does not match a human", identity: BotIdentity{}, user: "U5E3582NN", want: false},
+		{name: "unknown identity does not match an empty user", identity: BotIdentity{}, user: "", botID: "", want: false},
+		{name: "user id only identity still matches own message", identity: BotIdentity{UserID: "U08R6PTE4LA"}, user: "U08R6PTE4LA", botID: "B08R6PTDHQA", want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := &MessageHandler{identity: tt.identity}
+			if got := h.isOwnPost(tt.user, tt.botID); got != tt.want {
+				t.Fatalf("expected isOwnPost to be %v, got %v", tt.want, got)
+			}
+		})
+	}
+}
+
+// Missing dependencies expose any regression in the self-post guard.
+func TestHandleMessageIgnoresOwnPosts(t *testing.T) {
+	tests := []struct {
+		name  string
+		event *slackevents.MessageEvent
+	}{
+		{
+			name:  "ack echoed back with user and bot id",
+			event: &slackevents.MessageEvent{Channel: "C5H95KWNP", User: "U08R6PTE4LA", BotID: "B08R6PTDHQA", Text: "Ack"},
+		},
+		{
+			name:  "ack echoed back as bot_message without user",
+			event: &slackevents.MessageEvent{Channel: "C5H95KWNP", BotID: "B08R6PTDHQA", SubType: "bot_message", Text: "Ack"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Fatalf("expected own post to be ignored before processing, got panic: %v", r)
+				}
+			}()
+
+			h := NewMessageHandler(
+				nil,
+				testLogger(),
+				BotIdentity{UserID: "U08R6PTE4LA", BotID: "B08R6PTDHQA"},
+				nil,
+				nil,
+				10,
+				time.Hour,
+				time.Hour,
+			)
+
+			h.HandleMessage(context.Background(), tt.event)
+		})
+	}
+}
+
 func TestNewMessageHandlerStoresConfiguredCacheTTLs(t *testing.T) {
-	h := NewMessageHandler(nil, testLogger(), "", nil, nil, 10, 15*time.Minute, 45*time.Minute)
+	h := NewMessageHandler(nil, testLogger(), BotIdentity{}, nil, nil, 10, 15*time.Minute, 45*time.Minute)
 
 	if h.emojiListCacheTTL != 15*time.Minute {
 		t.Fatalf("expected emoji list cache TTL to be stored, got %v", h.emojiListCacheTTL)

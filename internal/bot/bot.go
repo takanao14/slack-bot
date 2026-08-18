@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
+
 	"slack-bot/internal/config"
 	"slack-bot/internal/handlers"
 	"slack-bot/internal/image"
@@ -64,8 +66,60 @@ func newBot(
 	return b
 }
 
+const authTestMaxAttempts = 5
+
+// Retry delays are variables so tests can shorten them.
+var (
+	authTestInitialBackoff = time.Second
+	authTestMaxBackoff     = 15 * time.Second
+)
+
+// resolveBotIdentity retries auth.test to prevent startup without self-filtering.
+func resolveBotIdentity(ctx context.Context, api *slack.Client, logger *slog.Logger) (handlers.BotIdentity, error) {
+	backoff := authTestInitialBackoff
+	var lastErr error
+
+	for attempt := 1; attempt <= authTestMaxAttempts; attempt++ {
+		resp, err := api.AuthTestContext(ctx)
+		switch {
+		case err != nil:
+			lastErr = err
+		case resp.UserID == "":
+			return handlers.BotIdentity{}, errors.New("auth test returned an empty user id")
+		default:
+			logger.Info("Resolved bot identity",
+				slog.String("bot_user_id", resp.UserID),
+				slog.String("bot_id", resp.BotID),
+			)
+			return handlers.BotIdentity{UserID: resp.UserID, BotID: resp.BotID}, nil
+		}
+
+		logger.Warn("Failed to resolve bot identity via auth test",
+			slog.Any("error", lastErr),
+			slog.Int("attempt", attempt),
+			slog.Int("max_attempts", authTestMaxAttempts),
+		)
+
+		if attempt == authTestMaxAttempts {
+			break
+		}
+
+		select {
+		case <-ctx.Done():
+			return handlers.BotIdentity{}, ctx.Err()
+		case <-time.After(backoff):
+		}
+
+		if backoff *= 2; backoff > authTestMaxBackoff {
+			backoff = authTestMaxBackoff
+		}
+	}
+
+	return handlers.BotIdentity{}, fmt.Errorf("auth test failed after %d attempts: %w", authTestMaxAttempts, lastErr)
+}
+
 // New creates and initializes a new Bot instance.
-func New(cfg *config.Config) (*Bot, error) {
+func New(ctx context.Context, cfg *config.Config) (*Bot, error) {
 	api := slack.New(
 		cfg.BotToken,
 		slack.OptionAppLevelToken(cfg.AppToken),
@@ -77,17 +131,9 @@ func New(cfg *config.Config) (*Bot, error) {
 		socketmode.OptionDebug(cfg.Debug),
 	)
 
-	botUserID := ""
-	authTestResp, err := api.AuthTest()
+	identity, err := resolveBotIdentity(ctx, api, cfg.Logger)
 	if err != nil {
-		cfg.Logger.Warn("Failed to resolve bot user id via auth test",
-			slog.Any("error", err), // Pass error directly
-		)
-	} else {
-		botUserID = authTestResp.UserID
-		cfg.Logger.Info("Resolved bot identity",
-			slog.String("bot_user_id", botUserID),
-		)
+		return nil, fmt.Errorf("failed to resolve bot identity: %w", err)
 	}
 
 	// Initialize Text2Image with default height of 32 pixels
@@ -115,7 +161,7 @@ func New(cfg *config.Config) (*Bot, error) {
 	messageHandler := handlers.NewMessageHandler(
 		api,
 		cfg.Logger,
-		botUserID,
+		identity,
 		text2img,
 		grpcClient,
 		cfg.ImageDuration,

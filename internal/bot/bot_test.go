@@ -2,13 +2,18 @@ package bot
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"sync"
 	"testing"
+	"time"
 
 	"slack-bot/internal/config"
 
+	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
 	"github.com/slack-go/slack/socketmode"
 )
@@ -196,6 +201,80 @@ func TestHandleEventsAPIUnhandledTypeAcksAndLogsTypeKey(t *testing.T) {
 	if !logs.hasEntryWithKey("Unhandled EventsAPI event type", slog.LevelDebug, "type") {
 		t.Fatal("expected debug log with type key")
 	}
+}
+
+// newAuthTestClient fails the first failures auth.test calls.
+func newAuthTestClient(t *testing.T, failures int) (*slack.Client, *int) {
+	t.Helper()
+
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		w.Header().Set("Content-Type", "application/json")
+		if calls <= failures {
+			http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		_, _ = io.WriteString(w, `{"ok":true,"user_id":"U08R6PTE4LA","bot_id":"B08R6PTDHQA"}`)
+	}))
+	t.Cleanup(server.Close)
+
+	return slack.New("xoxb-test", slack.OptionAPIURL(server.URL+"/")), &calls
+}
+
+func TestResolveBotIdentityRetriesUntilSuccess(t *testing.T) {
+	withFastAuthTestBackoff(t)
+
+	api, calls := newAuthTestClient(t, 2)
+
+	identity, err := resolveBotIdentity(context.Background(), api, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatalf("expected auth test to succeed after retries, got %v", err)
+	}
+	if identity.UserID != "U08R6PTE4LA" || identity.BotID != "B08R6PTDHQA" {
+		t.Fatalf("expected identity to be populated, got %+v", identity)
+	}
+	if *calls != 3 {
+		t.Fatalf("expected 3 auth test calls, got %d", *calls)
+	}
+}
+
+// Exhausted retries must fail startup to prevent self-reply loops.
+func TestResolveBotIdentityFailsAfterMaxAttempts(t *testing.T) {
+	withFastAuthTestBackoff(t)
+
+	api, calls := newAuthTestClient(t, authTestMaxAttempts)
+
+	if _, err := resolveBotIdentity(context.Background(), api, slog.New(slog.NewTextHandler(io.Discard, nil))); err == nil {
+		t.Fatal("expected an error once attempts are exhausted")
+	}
+	if *calls != authTestMaxAttempts {
+		t.Fatalf("expected %d auth test calls, got %d", authTestMaxAttempts, *calls)
+	}
+}
+
+func TestResolveBotIdentityStopsOnCanceledContext(t *testing.T) {
+	withFastAuthTestBackoff(t)
+
+	api, _ := newAuthTestClient(t, authTestMaxAttempts)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := resolveBotIdentity(ctx, api, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context.Canceled, got %v", err)
+	}
+}
+
+// withFastAuthTestBackoff shortens retry delays for tests.
+func withFastAuthTestBackoff(t *testing.T) {
+	t.Helper()
+
+	initial, max := authTestInitialBackoff, authTestMaxBackoff
+	authTestInitialBackoff, authTestMaxBackoff = time.Millisecond, time.Millisecond
+	t.Cleanup(func() {
+		authTestInitialBackoff, authTestMaxBackoff = initial, max
+	})
 }
 
 func TestNewBotConstructsWithProvidedDependencies(t *testing.T) {

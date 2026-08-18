@@ -25,10 +25,16 @@ import (
 	"github.com/slack-go/slack/slackevents"
 )
 
+// BotIdentity contains auth.test IDs used to detect the bot's posts.
+type BotIdentity struct {
+	UserID string
+	BotID  string
+}
+
 type MessageHandler struct {
 	api                *slack.Client
 	logger             *slog.Logger
-	botUserID          string
+	identity           BotIdentity
 	text2img           *slackbotimage.Text2Image
 	grpcClient         *grpcclient.ImageClient
 	imageDuration      int32
@@ -54,7 +60,7 @@ const (
 func NewMessageHandler(
 	api *slack.Client,
 	logger *slog.Logger,
-	botUserID string,
+	identity BotIdentity,
 	text2img *slackbotimage.Text2Image,
 	grpcClient *grpcclient.ImageClient,
 	imageDuration int32,
@@ -64,7 +70,7 @@ func NewMessageHandler(
 	return &MessageHandler{
 		api:                api,
 		logger:             logger,
-		botUserID:          botUserID,
+		identity:           identity,
 		text2img:           text2img,
 		grpcClient:         grpcClient,
 		imageDuration:      imageDuration,
@@ -77,8 +83,17 @@ func NewMessageHandler(
 	}
 }
 
+// isOwnPost detects messages that would cause a self-reply loop.
+func (h *MessageHandler) isOwnPost(user, botID string) bool {
+	if h.identity.UserID != "" && user == h.identity.UserID {
+		return true
+	}
+	// bot_message events may only carry bot_id.
+	return h.identity.BotID != "" && botID == h.identity.BotID
+}
+
 func (h *MessageHandler) HandleAppMention(ctx context.Context, ev *slackevents.AppMentionEvent) {
-	if h.botUserID != "" && ev.User == h.botUserID {
+	if h.isOwnPost(ev.User, ev.BotID) {
 		return
 	}
 
@@ -101,7 +116,7 @@ func (h *MessageHandler) HandleAppMention(ctx context.Context, ev *slackevents.A
 }
 
 func (h *MessageHandler) HandleMessage(ctx context.Context, ev *slackevents.MessageEvent) {
-	if h.botUserID != "" && ev.User == h.botUserID {
+	if h.isOwnPost(ev.User, ev.BotID) {
 		return
 	}
 

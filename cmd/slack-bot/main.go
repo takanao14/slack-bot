@@ -33,8 +33,13 @@ func run() error {
 	logger := cfg.Logger
 
 	// Initialize the bot.
-	b, err := bot.New(cfg)
+	b, err := bot.New(ctx, cfg)
 	if err != nil {
+		// A signal can cancel auth retries.
+		if errors.Is(err, context.Canceled) {
+			logger.Info("Bot initialization canceled by signal")
+			return nil
+		}
 		logger.Error("Failed to initialize bot", "error", err)
 		return err
 	}
