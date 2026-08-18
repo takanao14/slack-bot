@@ -1,6 +1,10 @@
 [Unit]
 Description=Slack Bot for LED Display
 After=network.target led-service.service
+# User services cannot use network-online.target; ExecStartPre waits for DNS.
+# For a system service, enable these directives and remove ExecStartPre.
+#Wants=network-online.target
+#After=network-online.target
 
 [Service]
 Type=simple
@@ -8,6 +12,11 @@ WorkingDirectory=${WORKING_DIR}
 ExecStart=${BINDIR}/${BINARY_NAME}
 Restart=always
 RestartSec=5
+
+# Avoid restart churn when a user service starts before DNS is ready.
+# auth.test also retries and fails startup if identity remains unavailable.
+ExecStartPre=/bin/sh -c 'until getent ahosts slack.com >/dev/null 2>&1; do sleep 2; done'
+TimeoutStartSec=120
 
 # Environment variables
 Environment=SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN}
