@@ -83,6 +83,24 @@ func NewMessageHandler(
 	}
 }
 
+// handledSubTypes lists the message subtypes that carry new text to display.
+// Anything else either announces no new content (joins, topic changes) or keeps
+// the author and text under ev.Message, where the self-post guard cannot reach
+// them: message_changed arrives with an empty User and Text, so every edit would
+// otherwise slip past isOwnPost and render as "(empty message)".
+var handledSubTypes = map[string]struct{}{
+	"":                 {},
+	"bot_message":      {},
+	"file_share":       {},
+	"me_message":       {},
+	"thread_broadcast": {},
+}
+
+func isHandledSubType(subType string) bool {
+	_, ok := handledSubTypes[subType]
+	return ok
+}
+
 // isOwnPost detects messages that would cause a self-reply loop.
 func (h *MessageHandler) isOwnPost(user, botID string) bool {
 	if h.identity.UserID != "" && user == h.identity.UserID {
@@ -116,6 +134,14 @@ func (h *MessageHandler) HandleAppMention(ctx context.Context, ev *slackevents.A
 }
 
 func (h *MessageHandler) HandleMessage(ctx context.Context, ev *slackevents.MessageEvent) {
+	if !isHandledSubType(ev.SubType) {
+		h.logger.Debug("Ignoring message subtype",
+			slog.String("subtype", ev.SubType),
+			slog.String("channel", ev.Channel),
+		)
+		return
+	}
+
 	if h.isOwnPost(ev.User, ev.BotID) {
 		return
 	}

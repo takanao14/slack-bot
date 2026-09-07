@@ -250,6 +250,69 @@ func TestHandleMessageIgnoresOwnPosts(t *testing.T) {
 	}
 }
 
+func TestIsHandledSubType(t *testing.T) {
+	tests := []struct {
+		subType string
+		want    bool
+	}{
+		{subType: "", want: true},
+		{subType: "bot_message", want: true},
+		{subType: "file_share", want: true},
+		{subType: "me_message", want: true},
+		{subType: "thread_broadcast", want: true},
+		{subType: "message_changed", want: false},
+		{subType: "message_deleted", want: false},
+		{subType: "message_replied", want: false},
+		{subType: "channel_join", want: false},
+		{subType: "channel_leave", want: false},
+		{subType: "channel_topic", want: false},
+		{subType: "tombstone", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.subType, func(t *testing.T) {
+			if got := isHandledSubType(tt.subType); got != tt.want {
+				t.Fatalf("expected isHandledSubType(%q) to be %v, got %v", tt.subType, tt.want, got)
+			}
+		})
+	}
+}
+
+// Missing dependencies expose any regression in the subtype guard. A
+// message_changed event carries no User, so isOwnPost alone would let the bot's
+// own edits through.
+func TestHandleMessageIgnoresUnhandledSubTypes(t *testing.T) {
+	events := []*slackevents.MessageEvent{
+		{Channel: "C5H95KWNP", SubType: "message_changed"},
+		{Channel: "C5H95KWNP", SubType: "message_deleted", DeletedTimeStamp: "1697000000.000100"},
+		{Channel: "C5H95KWNP", SubType: "channel_join", User: "U5E3582NN", Text: "<@U5E3582NN> has joined the channel"},
+		{Channel: "C5H95KWNP", SubType: "channel_topic", User: "U5E3582NN", Text: "set the channel topic"},
+	}
+
+	for _, ev := range events {
+		t.Run(ev.SubType, func(t *testing.T) {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Fatalf("expected subtype to be ignored before processing, got panic: %v", r)
+				}
+			}()
+
+			h := NewMessageHandler(
+				nil,
+				testLogger(),
+				BotIdentity{UserID: "U08R6PTE4LA", BotID: "B08R6PTDHQA"},
+				nil,
+				nil,
+				10,
+				time.Hour,
+				time.Hour,
+			)
+
+			h.HandleMessage(context.Background(), ev)
+		})
+	}
+}
+
 func TestNewMessageHandlerStoresConfiguredCacheTTLs(t *testing.T) {
 	h := NewMessageHandler(nil, testLogger(), BotIdentity{}, nil, nil, 10, 15*time.Minute, 45*time.Minute)
 
