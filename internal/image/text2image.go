@@ -189,18 +189,19 @@ func encodePPM(img *image.RGBA) []byte {
 	height := bounds.Dy()
 
 	var buf bytes.Buffer
+	// A wide strip reallocates a dozen times without this.
+	buf.Grow(width*height*3 + 32)
 
 	// PPM header (P6 format - binary)
 	fmt.Fprintf(&buf, "P6\n%d %d\n255\n", width, height)
 
-	// Write pixel data (RGB, no alpha)
-	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
-		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			r, g, b, _ := img.At(x, y).RGBA()
-			// Convert from 16-bit (0-65535) to 8-bit (0-255)
-			buf.WriteByte(byte(r >> 8))
-			buf.WriteByte(byte(g >> 8))
-			buf.WriteByte(byte(b >> 8))
+	// Read the pixel buffer directly; RGBA already stores the 8-bit,
+	// alpha-premultiplied values that At().RGBA() would return scaled to 16 bits.
+	for y := 0; y < height; y++ {
+		start := img.PixOffset(bounds.Min.X, bounds.Min.Y+y)
+		row := img.Pix[start : start+width*4]
+		for i := 0; i < len(row); i += 4 {
+			buf.Write(row[i : i+3])
 		}
 	}
 

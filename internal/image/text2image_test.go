@@ -1,7 +1,10 @@
 package image
 
 import (
+	"bytes"
 	"fmt"
+	"image"
+	"image/color"
 	"io"
 	"log/slog"
 	"os"
@@ -176,5 +179,33 @@ func TestRenderTextWithEmojiRendersPlaceholderForEmptyInput(t *testing.T) {
 		if width, _ := ppmSize(t, data); width <= trailingPadding {
 			t.Fatalf("expected placeholder text to be rendered for %q, got width %d", input, width)
 		}
+	}
+}
+
+// Pins the wire format, which the LED service and parsePPMSize both depend on.
+func TestEncodePPM(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 2, 1))
+	img.Set(0, 0, color.RGBA{R: 255, A: 255})
+	img.Set(1, 0, color.RGBA{G: 255, A: 255})
+
+	got := encodePPM(img)
+	want := append([]byte("P6\n2 1\n255\n"), 255, 0, 0, 0, 255, 0)
+
+	if !bytes.Equal(got, want) {
+		t.Fatalf("encodePPM() = %v, want %v", got, want)
+	}
+}
+
+// A non-zero origin must not shift the pixel rows.
+func TestEncodePPMHonoursBoundsOrigin(t *testing.T) {
+	img := image.NewRGBA(image.Rect(3, 5, 5, 6))
+	img.Set(3, 5, color.RGBA{B: 255, A: 255})
+	img.Set(4, 5, color.RGBA{R: 255, G: 255, B: 255, A: 255})
+
+	got := encodePPM(img)
+	want := append([]byte("P6\n2 1\n255\n"), 0, 0, 255, 255, 255, 255)
+
+	if !bytes.Equal(got, want) {
+		t.Fatalf("encodePPM() = %v, want %v", got, want)
 	}
 }
