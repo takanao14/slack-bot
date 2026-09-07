@@ -30,5 +30,5 @@
 - **Image Rendering**: Message text and emojis are rendered into images (PPM format) before being sent to the LED display.
 
 ## gRPC Integration
-- **Client**: Use the `pkg/grpc/client` for communicating with the LED image service.
+- **Client**: Use the `pkg/led/client` for communicating with the LED image service.
 - **Timeouts**: Always respect timeouts defined in the configuration.

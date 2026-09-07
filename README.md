@@ -23,7 +23,7 @@ slack-bot/
 │   ├── handlers/      # Slack event handlers
 │   └── image/         # Text and emoji rendering
 ├── pkg/
-│   └── grpc/client/   # LED service client
+│   └── led/client/    # LED service client
 ├── go.mod
 └── README.md
 ```
@@ -172,7 +172,7 @@ To add an event handler:
 
 - Message processing and display: `internal/handlers/message.go`
 - Image rendering (font and size): `internal/image/text2image.go`
-- gRPC client settings: `pkg/grpc/client/image_client.go`
+- gRPC client settings: `pkg/led/client/image_client.go`
 
 ## Troubleshooting
 

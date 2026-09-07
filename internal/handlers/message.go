@@ -18,7 +18,7 @@ import (
 	"time"
 
 	slackbotimage "slack-bot/internal/image"
-	grpcclient "slack-bot/pkg/grpc/client"
+	ledclient "slack-bot/pkg/led/client"
 
 	"github.com/enescakir/emoji"
 	"github.com/slack-go/slack"
@@ -36,7 +36,7 @@ type MessageHandler struct {
 	logger             *slog.Logger
 	identity           BotIdentity
 	text2img           *slackbotimage.Text2Image
-	grpcClient         *grpcclient.ImageClient
+	ledClient          *ledclient.ImageClient
 	imageDuration      int32
 	emojiCache         map[string]emojiCacheEntry
 	emojiListCache     map[string]string
@@ -62,7 +62,7 @@ func NewMessageHandler(
 	logger *slog.Logger,
 	identity BotIdentity,
 	text2img *slackbotimage.Text2Image,
-	grpcClient *grpcclient.ImageClient,
+	ledClient *ledclient.ImageClient,
 	imageDuration int32,
 	emojiListCacheTTL time.Duration,
 	emojiImageCacheTTL time.Duration,
@@ -72,7 +72,7 @@ func NewMessageHandler(
 		logger:             logger,
 		identity:           identity,
 		text2img:           text2img,
-		grpcClient:         grpcClient,
+		ledClient:          ledClient,
 		imageDuration:      imageDuration,
 		emojiCache:         make(map[string]emojiCacheEntry),
 		emojiListCache:     nil,
@@ -189,13 +189,13 @@ func (h *MessageHandler) processMessageImage(ctx context.Context, text string) e
 		return err
 	}
 
-	if h.grpcClient != nil {
+	if h.ledClient != nil {
 		width, height, parseErr := parsePPMSize(imageData)
 		if parseErr != nil {
 			h.logger.Warn("Failed to parse PPM size", slog.Any("error", parseErr))
 		}
 
-		_, sendErr := h.grpcClient.SendImage(
+		_, sendErr := h.ledClient.SendImage(
 			ctx,
 			imageData,
 			"image/x-portable-pixmap",

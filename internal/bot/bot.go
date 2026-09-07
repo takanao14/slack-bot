@@ -10,7 +10,7 @@ import (
 	"slack-bot/internal/config"
 	"slack-bot/internal/handlers"
 	"slack-bot/internal/image"
-	grpcclient "slack-bot/pkg/grpc/client"
+	ledclient "slack-bot/pkg/led/client"
 
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
@@ -26,11 +26,11 @@ type messageEventHandler interface {
 
 // Bot represents the Slack bot application.
 type Bot struct {
-	api        *slack.Client
-	client     *socketmode.Client
-	config     *config.Config
-	grpcClient *grpcclient.ImageClient
-	text2img   *image.Text2Image
+	api       *slack.Client
+	client    *socketmode.Client
+	config    *config.Config
+	ledClient *ledclient.ImageClient
+	text2img  *image.Text2Image
 
 	messageHandler messageEventHandler
 	runSocketMode  func(ctx context.Context) error
@@ -43,7 +43,7 @@ func newBot(
 	cfg *config.Config,
 	api *slack.Client,
 	client *socketmode.Client,
-	grpcClient *grpcclient.ImageClient,
+	ledClient *ledclient.ImageClient,
 	text2img *image.Text2Image,
 	messageHandler messageEventHandler,
 ) *Bot {
@@ -51,7 +51,7 @@ func newBot(
 		api:            api,
 		client:         client,
 		config:         cfg,
-		grpcClient:     grpcClient,
+		ledClient:      ledClient,
 		text2img:       text2img,
 		messageHandler: messageHandler,
 	}
@@ -143,7 +143,7 @@ func New(ctx context.Context, cfg *config.Config) (*Bot, error) {
 	}
 
 	// Initialize gRPC client
-	grpcClient, err := grpcclient.NewImageClient(cfg.LEDAddr, cfg.LEDConnectTimeout, cfg.LEDOperationTimeout, cfg.Logger)
+	ledClient, err := ledclient.NewImageClient(cfg.LEDAddr, cfg.LEDConnectTimeout, cfg.LEDOperationTimeout, cfg.Logger)
 	if err != nil {
 		// If gRPC client fails to initialize, ensure text2img is closed before returning.
 		if closeErr := text2img.Close(); closeErr != nil {
@@ -163,13 +163,13 @@ func New(ctx context.Context, cfg *config.Config) (*Bot, error) {
 		cfg.Logger,
 		identity,
 		text2img,
-		grpcClient,
+		ledClient,
 		cfg.LEDImageDurationSeconds,
 		cfg.EmojiListCacheTTL,
 		cfg.EmojiImageCacheTTL,
 	)
 
-	return newBot(cfg, api, client, grpcClient, text2img, messageHandler), nil
+	return newBot(cfg, api, client, ledClient, text2img, messageHandler), nil
 }
 
 // Run starts the bot's event processing loop.
@@ -335,8 +335,8 @@ func (b *Bot) Shutdown() error {
 	}
 
 	// Close gRPC connection
-	if b.grpcClient != nil {
-		if err := b.grpcClient.Close(); err != nil {
+	if b.ledClient != nil {
+		if err := b.ledClient.Close(); err != nil {
 			errs = errors.Join(errs, fmt.Errorf("failed to close gRPC client: %w", err))
 			b.config.Logger.Error("Failed to close gRPC client", slog.Any("error", err))
 		}

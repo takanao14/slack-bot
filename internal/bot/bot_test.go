@@ -410,8 +410,8 @@ func TestNewBotConstructsWithProvidedDependencies(t *testing.T) {
 	if b.messageHandler != msgHandler {
 		t.Fatal("expected message handler to be assigned")
 	}
-	if b.grpcClient != nil {
-		t.Fatal("expected nil grpcClient")
+	if b.ledClient != nil {
+		t.Fatal("expected nil ledClient")
 	}
 	if b.text2img != nil {
 		t.Fatal("expected nil text2img")
