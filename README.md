@@ -111,10 +111,6 @@ make lint    # Run the linter
 
 ## Usage
 
-### Responding to App Mentions
-
-Mention the bot (for example, `@your-bot Hello`) to receive a response.
-
 ### Displaying Messages on LED
 
 Channel messages are rendered as PPM images and sent to the LED service over gRPC.

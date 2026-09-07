@@ -163,27 +163,19 @@ func (h *MessageHandler) isOwnPost(user, botID string) bool {
 	return h.identity.BotID != "" && botID == h.identity.BotID
 }
 
+// HandleAppMention only records the mention. Slack delivers a channel mention as
+// both app_mention and message, and HandleMessage already renders the text and
+// acknowledges it, so replying here too answered one mention twice.
 func (h *MessageHandler) HandleAppMention(ctx context.Context, ev *slackevents.AppMentionEvent) {
+	_ = ctx
 	if h.isOwnPost(ev.User, ev.BotID) {
 		return
 	}
 
-	h.logger.Info("App mention received",
+	h.logger.Debug("App mention received",
 		slog.String("channel", ev.Channel),
 		slog.String("user", ev.User),
 	)
-
-	_, _, err := h.api.PostMessageContext(
-		ctx,
-		ev.Channel,
-		slack.MsgOptionText("Hello! Thank you for the mention.", false),
-	)
-	if err != nil {
-		h.logger.Error("Failed to post message",
-			slog.Any("error", err),
-			slog.String("channel", ev.Channel),
-		)
-	}
 }
 
 func (h *MessageHandler) HandleMessage(ctx context.Context, ev *slackevents.MessageEvent) {

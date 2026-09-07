@@ -250,6 +250,23 @@ func TestHandleMessageIgnoresOwnPosts(t *testing.T) {
 	}
 }
 
+// A nil client exposes any reply reintroduced here: Slack delivers a channel
+// mention as both app_mention and message, so replying would answer twice.
+func TestHandleAppMentionDoesNotReply(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("expected no Slack API call, got panic: %v", r)
+		}
+	}()
+
+	h := NewMessageHandler(nil, testLogger(), BotIdentity{UserID: "U08R6PTE4LA"}, nil, nil, 10, time.Hour, time.Hour)
+	h.HandleAppMention(context.Background(), &slackevents.AppMentionEvent{
+		Channel: "C5H95KWNP",
+		User:    "U5E3582NN",
+		Text:    "<@U08R6PTE4LA> hello",
+	})
+}
+
 func TestDecodeSlackText(t *testing.T) {
 	tests := []struct {
 		name  string
