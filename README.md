@@ -37,7 +37,7 @@ Set the required variables and any optional overrides:
 ```bash
 export SLACK_BOT_TOKEN="xoxb-your-bot-token"
 export SLACK_APP_TOKEN="xapp-your-app-token"
-export SLACK_BOT_FONT="/path/to/font.ttf"
+export SLACK_BOT_FONT_PATH="/path/to/font.ttf"
 export SLACK_BOT_LED_ADDR="localhost:50051"                     # Optional; default: localhost:50051
 export SLACK_BOT_LED_IMAGE_DURATION_SECONDS="10"                # Optional; seconds, default: 10
 export SLACK_BOT_LED_CONNECT_TIMEOUT_SECONDS="10"               # Optional; seconds, default: 10

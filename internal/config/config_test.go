@@ -10,7 +10,7 @@ func setRequiredEnv(t *testing.T) {
 	t.Helper()
 	t.Setenv("SLACK_BOT_TOKEN", "xoxb-test")
 	t.Setenv("SLACK_APP_TOKEN", "xapp-test")
-	t.Setenv("SLACK_BOT_FONT", "/tmp/test.ttf")
+	t.Setenv("SLACK_BOT_FONT_PATH", "/tmp/test.ttf")
 }
 
 func TestLoadReadsEmojiCacheTTLsFromEnv(t *testing.T) {
@@ -75,7 +75,7 @@ func TestLoadReturnsErrorWhenRequiredEnvVarsAreMissing(t *testing.T) {
 			name: "Missing Bot Token",
 			setup: func() {
 				t.Setenv("SLACK_APP_TOKEN", "app-token")
-				t.Setenv("SLACK_BOT_FONT", "font.ttf")
+				t.Setenv("SLACK_BOT_FONT_PATH", "font.ttf")
 			},
 			wantErr: "SLACK_BOT_TOKEN environment variable is required",
 		},
@@ -83,7 +83,7 @@ func TestLoadReturnsErrorWhenRequiredEnvVarsAreMissing(t *testing.T) {
 			name: "Missing App Token",
 			setup: func() {
 				t.Setenv("SLACK_BOT_TOKEN", "bot-token")
-				t.Setenv("SLACK_BOT_FONT", "font.ttf")
+				t.Setenv("SLACK_BOT_FONT_PATH", "font.ttf")
 			},
 			wantErr: "SLACK_APP_TOKEN environment variable is required",
 		},
@@ -93,7 +93,7 @@ func TestLoadReturnsErrorWhenRequiredEnvVarsAreMissing(t *testing.T) {
 				t.Setenv("SLACK_BOT_TOKEN", "bot-token")
 				t.Setenv("SLACK_APP_TOKEN", "app-token")
 			},
-			wantErr: "SLACK_BOT_FONT environment variable is required",
+			wantErr: "SLACK_BOT_FONT_PATH environment variable is required",
 		},
 	}
 

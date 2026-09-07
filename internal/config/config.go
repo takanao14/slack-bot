@@ -35,7 +35,7 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
-	fontPath, err := getRequiredEnv("SLACK_BOT_FONT")
+	fontPath, err := getRequiredEnv("SLACK_BOT_FONT_PATH")
 	if err != nil {
 		return nil, err
 	}
