@@ -86,6 +86,18 @@ make build
 ./bin/slack-bot
 ```
 
+### Container Image
+
+```bash
+docker build -t slack-bot .
+docker run --rm -p 8080:8080 -e SLACK_BOT_TOKEN=xoxb-... -e SLACK_APP_TOKEN=xapp-... slack-bot
+```
+
+The image bundles BIZ UDPGothic, the proportional cut of BIZ UDGothic (Morisawa
+Inc., SIL Open Font License 1.1), under `/usr/share/fonts/BIZUDGothic/` together
+with its `OFL.txt`, and points `SLACK_BOT_FONT_PATH` at it, so only the two Slack
+tokens are required. The font archive and its license are both pinned by SHA-256.
+
 ### Other Make Targets
 
 ```bash
