@@ -138,13 +138,19 @@ func TestHandleEventEventsAPIRoutesToMessageHandler(t *testing.T) {
 	}
 }
 
-func TestHandleEventsAPITypeMismatchLogsDataKeyAndSkipsAck(t *testing.T) {
+// An envelope this build cannot parse must still be acknowledged, or Slack
+// redelivers it into the same failure.
+func TestHandleEventsAPITypeMismatchAcksAndLogsDataKey(t *testing.T) {
 	b, logs, _, ackCount := newTestBot(t)
 
-	b.handleEventsAPI(context.Background(), socketmode.Event{Type: socketmode.EventTypeEventsAPI, Data: "invalid"})
+	b.handleEventsAPI(context.Background(), socketmode.Event{
+		Type:    socketmode.EventTypeEventsAPI,
+		Data:    "invalid",
+		Request: &socketmode.Request{},
+	})
 
-	if *ackCount != 0 {
-		t.Fatalf("expected ack not to be called, got %d", *ackCount)
+	if *ackCount != 1 {
+		t.Fatalf("expected ack to be called once, got %d", *ackCount)
 	}
 	if !logs.hasEntryWithKey("Failed to parse EventsAPI event", slog.LevelWarn, "data") {
 		t.Fatal("expected warn log with data key")

@@ -293,17 +293,18 @@ func eventError(data any) error {
 
 // handleEventsAPI processes Slack Events API events.
 func (b *Bot) handleEventsAPI(ctx context.Context, evt socketmode.Event) {
+	// Acknowledge before parsing. Slack redelivers whatever goes unacknowledged,
+	// and an envelope this build cannot parse fails the same way every time.
+	if evt.Request != nil && b.ackRequest != nil {
+		b.ackRequest(*evt.Request)
+	}
+
 	eventsAPIEvent, ok := evt.Data.(slackevents.EventsAPIEvent)
 	if !ok {
 		b.config.Logger.Warn("Failed to parse EventsAPI event",
 			slog.Any("data", evt.Data),
 		)
 		return
-	}
-
-	// Acknowledge the event if an ack function is available.
-	if evt.Request != nil && b.ackRequest != nil {
-		b.ackRequest(*evt.Request)
 	}
 
 	switch eventsAPIEvent.Type {
