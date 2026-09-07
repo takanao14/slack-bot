@@ -31,7 +31,7 @@ func TestLoadReadsEmojiCacheTTLsFromEnv(t *testing.T) {
 	}
 }
 
-func TestLoadUsesZeroTTLsWhenEmojiCacheTTLsAreUnset(t *testing.T) {
+func TestLoadUsesDefaultTTLsWhenEmojiCacheTTLsAreUnset(t *testing.T) {
 	setRequiredEnv(t)
 
 	cfg, err := Load()
@@ -39,29 +39,54 @@ func TestLoadUsesZeroTTLsWhenEmojiCacheTTLsAreUnset(t *testing.T) {
 		t.Fatalf("expected config to load, got error: %v", err)
 	}
 
-	if cfg.EmojiListCacheTTL != 0 {
-		t.Fatalf("expected unset emoji list cache TTL to remain zero, got %v", cfg.EmojiListCacheTTL)
+	if cfg.EmojiListCacheTTL != defaultEmojiListCacheTTL {
+		t.Fatalf("expected unset emoji list cache TTL to default, got %v", cfg.EmojiListCacheTTL)
 	}
-	if cfg.EmojiImageCacheTTL != 0 {
-		t.Fatalf("expected unset emoji image cache TTL to remain zero, got %v", cfg.EmojiImageCacheTTL)
+	if cfg.EmojiImageCacheTTL != defaultEmojiImageCacheTTL {
+		t.Fatalf("expected unset emoji image cache TTL to default, got %v", cfg.EmojiImageCacheTTL)
 	}
 }
 
 func TestLoadFallsBackWhenEmojiCacheTTLValuesAreInvalid(t *testing.T) {
-	setRequiredEnv(t)
-	t.Setenv("SLACK_BOT_EMOJI_LIST_CACHE_TTL_SECONDS", "bad")
-	t.Setenv("SLACK_BOT_EMOJI_IMAGE_CACHE_TTL_SECONDS", "oops")
+	// Zero and negative values are rejected too: the configuration carries the
+	// effective TTL, so a non-positive one would expire every entry at once.
+	for _, value := range []string{"bad", "0", "-30"} {
+		t.Run(value, func(t *testing.T) {
+			setRequiredEnv(t)
+			t.Setenv("SLACK_BOT_EMOJI_LIST_CACHE_TTL_SECONDS", value)
+			t.Setenv("SLACK_BOT_EMOJI_IMAGE_CACHE_TTL_SECONDS", value)
 
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("expected config to load, got error: %v", err)
-	}
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("expected config to load, got error: %v", err)
+			}
 
-	if cfg.EmojiListCacheTTL != 0 {
-		t.Fatalf("expected invalid emoji list cache TTL to fall back to zero, got %v", cfg.EmojiListCacheTTL)
+			if cfg.EmojiListCacheTTL != defaultEmojiListCacheTTL {
+				t.Fatalf("expected emoji list cache TTL to fall back to the default, got %v", cfg.EmojiListCacheTTL)
+			}
+			if cfg.EmojiImageCacheTTL != defaultEmojiImageCacheTTL {
+				t.Fatalf("expected emoji image cache TTL to fall back to the default, got %v", cfg.EmojiImageCacheTTL)
+			}
+		})
 	}
-	if cfg.EmojiImageCacheTTL != 0 {
-		t.Fatalf("expected invalid emoji image cache TTL to fall back to zero, got %v", cfg.EmojiImageCacheTTL)
+}
+
+// A plain Atoi would have wrapped an out-of-range value into a negative
+// duration instead of rejecting it.
+func TestLoadRejectsOutOfRangeImageDuration(t *testing.T) {
+	for _, value := range []string{"99999999999", "-1", "0"} {
+		t.Run(value, func(t *testing.T) {
+			setRequiredEnv(t)
+			t.Setenv("SLACK_BOT_LED_IMAGE_DURATION_SECONDS", value)
+
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("expected config to load, got error: %v", err)
+			}
+			if cfg.LEDImageDurationSeconds != 10 {
+				t.Fatalf("expected the default duration, got %d", cfg.LEDImageDurationSeconds)
+			}
+		})
 	}
 }
 

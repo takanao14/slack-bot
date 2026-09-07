@@ -35,7 +35,6 @@ func run() error {
 	// Load configuration from environment variables.
 	cfg, err := config.Load()
 	if err != nil {
-		// Use a default logger since the configured one isn't available.
 		return err
 	}
 	logger := cfg.Logger

@@ -8,6 +8,13 @@ import (
 	"time"
 )
 
+// Defaults live here so that a single place defines them; the consumers use
+// whatever Load hands them.
+const (
+	defaultEmojiListCacheTTL  = 24 * time.Hour
+	defaultEmojiImageCacheTTL = 24 * time.Hour
+)
+
 // Config holds the application configuration.
 type Config struct {
 	BotToken                string
@@ -55,8 +62,8 @@ func Load() (*Config, error) {
 	ledImageDurationSeconds := getEnvAsInt32(logger, "SLACK_BOT_LED_IMAGE_DURATION_SECONDS", 10)
 	ledConnectTimeout := getEnvAsDuration(logger, "SLACK_BOT_LED_CONNECT_TIMEOUT_SECONDS", 10*time.Second)
 	ledOperationTimeout := getEnvAsDuration(logger, "SLACK_BOT_LED_OPERATION_TIMEOUT_SECONDS", 30*time.Second)
-	emojiListCacheTTL := getEnvAsDuration(logger, "SLACK_BOT_EMOJI_LIST_CACHE_TTL_SECONDS", 0)
-	emojiImageCacheTTL := getEnvAsDuration(logger, "SLACK_BOT_EMOJI_IMAGE_CACHE_TTL_SECONDS", 0)
+	emojiListCacheTTL := getEnvAsDuration(logger, "SLACK_BOT_EMOJI_LIST_CACHE_TTL_SECONDS", defaultEmojiListCacheTTL)
+	emojiImageCacheTTL := getEnvAsDuration(logger, "SLACK_BOT_EMOJI_IMAGE_CACHE_TTL_SECONDS", defaultEmojiImageCacheTTL)
 
 	return &Config{
 		BotToken:                botToken,
@@ -91,21 +98,28 @@ func getEnv(key, defaultValue string) string {
 	return defaultValue
 }
 
-// getEnvAsInt32 retrieves an environment variable as an int32 or returns a default value.
+// getEnvAsInt32 retrieves an environment variable as a positive int32 or returns
+// a default value. Parsing at 32 bits rejects the overflow a plain Atoi would
+// have wrapped silently.
 func getEnvAsInt32(logger *slog.Logger, key string, defaultValue int32) int32 {
 	strValue := getEnv(key, "")
 	if strValue == "" {
 		return defaultValue
 	}
-	intValue, err := strconv.Atoi(strValue)
+	intValue, err := strconv.ParseInt(strValue, 10, 32)
 	if err != nil {
 		logger.Warn("Failed to parse environment variable as integer, using default", "key", key, "value", strValue, "default", defaultValue)
+		return defaultValue
+	}
+	if intValue <= 0 {
+		logger.Warn("Environment variable must be positive, using default", "key", key, "value", strValue, "default", defaultValue)
 		return defaultValue
 	}
 	return int32(intValue)
 }
 
-// getEnvAsDuration retrieves an environment variable as a time.Duration in seconds or returns a default value.
+// getEnvAsDuration retrieves an environment variable as a positive number of
+// seconds or returns a default value.
 func getEnvAsDuration(logger *slog.Logger, key string, defaultValue time.Duration) time.Duration {
 	strValue := getEnv(key, "")
 	if strValue == "" {
@@ -114,6 +128,10 @@ func getEnvAsDuration(logger *slog.Logger, key string, defaultValue time.Duratio
 	intValue, err := strconv.Atoi(strValue)
 	if err != nil {
 		logger.Warn("Failed to parse environment variable as duration, using default", "key", key, "value", strValue, "default", defaultValue)
+		return defaultValue
+	}
+	if intValue <= 0 {
+		logger.Warn("Environment variable must be positive, using default", "key", key, "value", strValue, "default", defaultValue)
 		return defaultValue
 	}
 	return time.Duration(intValue) * time.Second

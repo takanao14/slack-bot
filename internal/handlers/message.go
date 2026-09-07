@@ -54,8 +54,6 @@ type emojiCacheEntry struct {
 }
 
 const (
-	defaultEmojiListCacheTTL  = 24 * time.Hour
-	defaultEmojiImageCacheTTL = 24 * time.Hour
 	// maxEmojiCacheEntries bounds the decoded-image cache. Expired entries are
 	// otherwise only dropped when the same emoji is looked up again, so one used
 	// once would stay resident for the life of the process.
@@ -306,7 +304,7 @@ func (h *MessageHandler) newEmojiResolver(ctx context.Context, emojiMap map[stri
 }
 
 func (h *MessageHandler) resolveEmojiImage(ctx context.Context, emojiMap map[string]string, name string) (image.Image, error) {
-	imageCacheTTL := h.getEmojiImageCacheTTL()
+	imageCacheTTL := h.emojiImageCacheTTL
 
 	h.cacheMu.RLock()
 	entry, found := h.emojiCache[name]
@@ -416,7 +414,7 @@ func (h *MessageHandler) getCachedEmojiMap() (map[string]string, bool) {
 	fetchedAt := h.emojiListFetchedAt
 	h.cacheMu.RUnlock()
 
-	if cachedMap != nil && time.Since(fetchedAt) < h.getEmojiListCacheTTL() {
+	if cachedMap != nil && time.Since(fetchedAt) < h.emojiListCacheTTL {
 		return cachedMap, true
 	}
 	return nil, false
@@ -444,20 +442,6 @@ func (h *MessageHandler) getEmojiMap(ctx context.Context) map[string]string {
 	h.cacheMu.Unlock()
 
 	return emojiMap
-}
-
-func (h *MessageHandler) getEmojiListCacheTTL() time.Duration {
-	if h.emojiListCacheTTL > 0 {
-		return h.emojiListCacheTTL
-	}
-	return defaultEmojiListCacheTTL
-}
-
-func (h *MessageHandler) getEmojiImageCacheTTL() time.Duration {
-	if h.emojiImageCacheTTL > 0 {
-		return h.emojiImageCacheTTL
-	}
-	return defaultEmojiImageCacheTTL
 }
 
 func (h *MessageHandler) invalidateEmojiListCacheLocked() {

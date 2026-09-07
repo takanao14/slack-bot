@@ -477,17 +477,6 @@ func TestNewMessageHandlerStoresConfiguredCacheTTLs(t *testing.T) {
 	}
 }
 
-func TestMessageHandlerTTLGettersFallbackToDefaults(t *testing.T) {
-	h := &MessageHandler{}
-
-	if got := h.getEmojiListCacheTTL(); got != defaultEmojiListCacheTTL {
-		t.Fatalf("expected default emoji list cache TTL %v, got %v", defaultEmojiListCacheTTL, got)
-	}
-	if got := h.getEmojiImageCacheTTL(); got != defaultEmojiImageCacheTTL {
-		t.Fatalf("expected default emoji image cache TTL %v, got %v", defaultEmojiImageCacheTTL, got)
-	}
-}
-
 func TestEmojiCacheConcurrentAccess(t *testing.T) {
 	// This test ensures that concurrent access to the cache map does not cause race conditions.
 	// Run with 'go test -race' to verify.
