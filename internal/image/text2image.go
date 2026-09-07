@@ -22,6 +22,14 @@ const (
 	DPI = 72
 	// trailingPadding is the extra space added to the end of the rendered image.
 	trailingPadding = 16
+	// maxTextRunes bounds the rendered width. Slack accepts messages of roughly
+	// 40,000 characters, which at this height would allocate a canvas of tens of
+	// megabytes and then exceed the gRPC server's 4 MB default receive limit, so
+	// the send would fail only after the memory had been spent. A full-width
+	// glyph is as wide as the height, keeping the worst case here under 1 MB.
+	maxTextRunes = 300
+	// ellipsis marks text cut short by maxTextRunes.
+	ellipsis = "…"
 )
 
 var emojiTokenRe = regexp.MustCompile(`:([a-zA-Z0-9_+\-]+):`)
@@ -83,6 +91,14 @@ func (t *Text2Image) RenderTextWithEmoji(text string, resolve EmojiResolver) ([]
 	singleLine := strings.ReplaceAll(text, "\n", " ")
 	if strings.TrimSpace(singleLine) == "" {
 		singleLine = "(empty message)"
+	}
+	// Count runes so that multi-byte text is never split mid-character.
+	if runes := []rune(singleLine); len(runes) > maxTextRunes {
+		t.logger.Info("Truncating message to bound the rendered image",
+			slog.Int("runes", len(runes)),
+			slog.Int("limit", maxTextRunes),
+		)
+		singleLine = string(runes[:maxTextRunes]) + ellipsis
 	}
 
 	items, totalWidth := t.calculateLayout(singleLine, resolve)
