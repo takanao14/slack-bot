@@ -38,10 +38,10 @@ Set the required variables and any optional overrides:
 export SLACK_BOT_TOKEN="xoxb-your-bot-token"
 export SLACK_APP_TOKEN="xapp-your-app-token"
 export SLACK_BOT_FONT="/path/to/font.ttf"
-export SLACK_BOT_GRPC_ADDR="localhost:50051"                    # Optional; default: localhost:50051
-export SLACK_BOT_IMAGE_DURATION="10"                            # Optional; seconds, default: 10
-export SLACK_BOT_GRPC_CONNECT_TIMEOUT_SECONDS="10"              # Optional; seconds, default: 10
-export SLACK_BOT_GRPC_OPERATION_TIMEOUT_SECONDS="30"            # Optional; seconds, default: 30
+export SLACK_BOT_LED_ADDR="localhost:50051"                     # Optional; default: localhost:50051
+export SLACK_BOT_LED_IMAGE_DURATION_SECONDS="10"                # Optional; seconds, default: 10
+export SLACK_BOT_LED_CONNECT_TIMEOUT_SECONDS="10"               # Optional; seconds, default: 10
+export SLACK_BOT_LED_OPERATION_TIMEOUT_SECONDS="30"             # Optional; seconds, default: 30
 export SLACK_BOT_EMOJI_LIST_CACHE_TTL_SECONDS="86400"           # Optional; seconds, default: 24h
 export SLACK_BOT_EMOJI_IMAGE_CACHE_TTL_SECONDS="86400"          # Optional; seconds, default: 24h
 export DEBUG="true"                                             # Optional; enables debug logs

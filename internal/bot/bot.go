@@ -143,7 +143,7 @@ func New(ctx context.Context, cfg *config.Config) (*Bot, error) {
 	}
 
 	// Initialize gRPC client
-	grpcClient, err := grpcclient.NewImageClient(cfg.GRPCAddr, cfg.GRPCConnectTimeout, cfg.GRPCOperationTimeout, cfg.Logger)
+	grpcClient, err := grpcclient.NewImageClient(cfg.LEDAddr, cfg.LEDConnectTimeout, cfg.LEDOperationTimeout, cfg.Logger)
 	if err != nil {
 		// If gRPC client fails to initialize, ensure text2img is closed before returning.
 		if closeErr := text2img.Close(); closeErr != nil {
@@ -154,8 +154,8 @@ func New(ctx context.Context, cfg *config.Config) (*Bot, error) {
 		return nil, fmt.Errorf("failed to initialize gRPC client: %w", err)
 	}
 	cfg.Logger.Info("gRPC client initialized",
-		slog.String("grpc_addr", cfg.GRPCAddr),
-		slog.Duration("grpc_connect_timeout", cfg.GRPCConnectTimeout),
+		slog.String("led_addr", cfg.LEDAddr),
+		slog.Duration("led_connect_timeout", cfg.LEDConnectTimeout),
 	)
 
 	messageHandler := handlers.NewMessageHandler(
@@ -164,7 +164,7 @@ func New(ctx context.Context, cfg *config.Config) (*Bot, error) {
 		identity,
 		text2img,
 		grpcClient,
-		cfg.ImageDuration,
+		cfg.LEDImageDurationSeconds,
 		cfg.EmojiListCacheTTL,
 		cfg.EmojiImageCacheTTL,
 	)

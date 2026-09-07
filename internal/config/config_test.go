@@ -117,7 +117,7 @@ func TestLoadReturnsErrorWhenRequiredEnvVarsAreMissing(t *testing.T) {
 func TestLoadSetsDefaultValues(t *testing.T) {
 	setRequiredEnv(t)
 	// Ensure these are unset
-	if err := os.Unsetenv("SLACK_BOT_GRPC_ADDR"); err != nil {
+	if err := os.Unsetenv("SLACK_BOT_LED_ADDR"); err != nil {
 		t.Fatalf("failed to unset env: %v", err)
 	}
 	if err := os.Unsetenv("DEBUG"); err != nil {
@@ -129,27 +129,27 @@ func TestLoadSetsDefaultValues(t *testing.T) {
 		t.Fatalf("expected config to load, got error: %v", err)
 	}
 
-	if cfg.GRPCAddr != "localhost:50051" {
-		t.Errorf("expected default GRPCAddr 'localhost:50051', got %q", cfg.GRPCAddr)
+	if cfg.LEDAddr != "localhost:50051" {
+		t.Errorf("expected default LEDAddr 'localhost:50051', got %q", cfg.LEDAddr)
 	}
 	if cfg.Debug != false {
 		t.Errorf("expected default Debug to be false, got %v", cfg.Debug)
 	}
-	if cfg.ImageDuration != 10 {
-		t.Errorf("expected default ImageDuration 10, got %d", cfg.ImageDuration)
+	if cfg.LEDImageDurationSeconds != 10 {
+		t.Errorf("expected default LEDImageDurationSeconds 10, got %d", cfg.LEDImageDurationSeconds)
 	}
 }
 
 func TestLoadFallsBackToDefaultImageDurationOnInvalidInput(t *testing.T) {
 	setRequiredEnv(t)
-	t.Setenv("SLACK_BOT_IMAGE_DURATION", "invalid-number")
+	t.Setenv("SLACK_BOT_LED_IMAGE_DURATION_SECONDS", "invalid-number")
 
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("expected config to load, got error: %v", err)
 	}
 
-	if cfg.ImageDuration != 10 { // Default is 10
-		t.Errorf("expected default ImageDuration 10 when env var is invalid, got %d", cfg.ImageDuration)
+	if cfg.LEDImageDurationSeconds != 10 { // Default is 10
+		t.Errorf("expected default LEDImageDurationSeconds 10 when env var is invalid, got %d", cfg.LEDImageDurationSeconds)
 	}
 }

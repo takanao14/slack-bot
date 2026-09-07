@@ -10,17 +10,17 @@ import (
 
 // Config holds the application configuration.
 type Config struct {
-	BotToken             string
-	AppToken             string
-	FontPath             string
-	GRPCAddr             string
-	GRPCConnectTimeout   time.Duration
-	GRPCOperationTimeout time.Duration
-	EmojiListCacheTTL    time.Duration
-	EmojiImageCacheTTL   time.Duration
-	Debug                bool
-	Logger               *slog.Logger
-	ImageDuration        int32
+	BotToken                string
+	AppToken                string
+	FontPath                string
+	LEDAddr                 string
+	LEDConnectTimeout       time.Duration
+	LEDOperationTimeout     time.Duration
+	EmojiListCacheTTL       time.Duration
+	EmojiImageCacheTTL      time.Duration
+	Debug                   bool
+	Logger                  *slog.Logger
+	LEDImageDurationSeconds int32
 }
 
 // Load loads configuration from environment variables.
@@ -47,25 +47,25 @@ func Load() (*Config, error) {
 	}
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel}))
 
-	grpcAddr := getEnv("SLACK_BOT_GRPC_ADDR", "localhost:50051")
-	imageDuration := getEnvAsInt32(logger, "SLACK_BOT_IMAGE_DURATION", 10)
-	grpcConnectTimeout := getEnvAsDuration(logger, "SLACK_BOT_GRPC_CONNECT_TIMEOUT_SECONDS", 10*time.Second)
-	grpcOperationTimeout := getEnvAsDuration(logger, "SLACK_BOT_GRPC_OPERATION_TIMEOUT_SECONDS", 30*time.Second)
+	ledAddr := getEnv("SLACK_BOT_LED_ADDR", "localhost:50051")
+	ledImageDurationSeconds := getEnvAsInt32(logger, "SLACK_BOT_LED_IMAGE_DURATION_SECONDS", 10)
+	ledConnectTimeout := getEnvAsDuration(logger, "SLACK_BOT_LED_CONNECT_TIMEOUT_SECONDS", 10*time.Second)
+	ledOperationTimeout := getEnvAsDuration(logger, "SLACK_BOT_LED_OPERATION_TIMEOUT_SECONDS", 30*time.Second)
 	emojiListCacheTTL := getEnvAsDuration(logger, "SLACK_BOT_EMOJI_LIST_CACHE_TTL_SECONDS", 0)
 	emojiImageCacheTTL := getEnvAsDuration(logger, "SLACK_BOT_EMOJI_IMAGE_CACHE_TTL_SECONDS", 0)
 
 	return &Config{
-		BotToken:             botToken,
-		AppToken:             appToken,
-		FontPath:             fontPath,
-		GRPCAddr:             grpcAddr,
-		GRPCConnectTimeout:   grpcConnectTimeout,
-		GRPCOperationTimeout: grpcOperationTimeout,
-		EmojiListCacheTTL:    emojiListCacheTTL,
-		EmojiImageCacheTTL:   emojiImageCacheTTL,
-		Debug:                debug,
-		Logger:               logger,
-		ImageDuration:        imageDuration,
+		BotToken:                botToken,
+		AppToken:                appToken,
+		FontPath:                fontPath,
+		LEDAddr:                 ledAddr,
+		LEDConnectTimeout:       ledConnectTimeout,
+		LEDOperationTimeout:     ledOperationTimeout,
+		EmojiListCacheTTL:       emojiListCacheTTL,
+		EmojiImageCacheTTL:      emojiImageCacheTTL,
+		Debug:                   debug,
+		Logger:                  logger,
+		LEDImageDurationSeconds: ledImageDurationSeconds,
 	}, nil
 }
 
