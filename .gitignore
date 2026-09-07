@@ -3,5 +3,4 @@
 .DS_Store
 .idea
 bin
-slack-bot.service
 slack-bot.iml

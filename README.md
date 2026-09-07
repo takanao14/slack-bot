@@ -101,57 +101,13 @@ tokens are required. The font archive and its license are both pinned by SHA-256
 ### Other Make Targets
 
 ```bash
-make help             # Show available targets
-make test             # Run tests
-make clean            # Remove build artifacts
-make fmt              # Format the code
-make lint             # Run the linter
-make service          # Generate the systemd service file
-make install-service  # Install the service file (Linux only)
-make enable-service   # Enable and start the service (Linux only)
+make help    # Show available targets
+make test    # Run tests
+make image   # Build the container image
+make clean   # Remove build artifacts
+make fmt     # Format the code
+make lint    # Run the linter
 ```
-
-## Running as a Linux User Service
-
-Run the bot as a persistent Linux user service.
-
-### 1. Install and Start
-
-```bash
-make enable-service
-```
-
-### 2. Keep the Service Running After Logout
-
-Enable lingering to keep the service running after logout:
-
-```bash
-loginctl enable-linger $USER
-```
-
-Or use:
-
-```bash
-make enable-linger
-```
-
-### 3. View Logs
-
-```bash
-journalctl --user -u slack-bot -f
-```
-
-### Startup Ordering
-
-A user service may start before DNS is ready. Startup is protected by:
-
-- `ExecStartPre`, which waits up to 120 seconds for `slack.com` to resolve.
-- `auth.test` retries, which prevent startup without the identity needed to filter
-  the bot's own posts.
-
-`Restart=always` retries failed starts. The user service cannot use the system
-manager's `network-online.target`; its directives remain commented in the template
-for system-service installations.
 
 ## Usage
 
