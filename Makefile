@@ -6,6 +6,8 @@ BINARY_DIR=bin
 BINARY_PATH=$(BINARY_DIR)/$(BINARY_NAME)
 GO=go
 GOFLAGS=-v
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+LDFLAGS=-X main.version=$(VERSION)
 PREFIX?=$(HOME)/slack-bot
 BINDIR=$(PREFIX)/bin
 SYSTEMD_DIR=$(HOME)/.config/systemd/user
@@ -33,7 +35,7 @@ help: ## Show this help message
 build: ## Build the application
 	@echo "Building $(BINARY_NAME)..."
 	@mkdir -p $(BINARY_DIR)
-	$(GO) build $(GOFLAGS) -o $(BINARY_PATH) ./cmd/$(BINARY_NAME)
+	$(GO) build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BINARY_PATH) ./cmd/$(BINARY_NAME)
 
 run: ## Run the application
 	@echo "Running $(BINARY_NAME)..."

@@ -16,6 +16,9 @@ import (
 // healthShutdownTimeout bounds the wait for in-flight probes at exit.
 const healthShutdownTimeout = 5 * time.Second
 
+// version is injected at build time with -ldflags "-X main.version=...".
+var version = "dev"
+
 func main() {
 	if err := run(); err != nil {
 		slog.Error("Application failed", "error", err)
@@ -36,6 +39,7 @@ func run() error {
 		return err
 	}
 	logger := cfg.Logger
+	logger.Info("Starting slack-bot", "version", version)
 
 	// Start probing before the bot, whose auth.test retries can take tens of
 	// seconds. A probe must not fail while startup is still healthy.
