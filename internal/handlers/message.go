@@ -56,6 +56,16 @@ type emojiCacheEntry struct {
 const (
 	defaultEmojiListCacheTTL  = 24 * time.Hour
 	defaultEmojiImageCacheTTL = 24 * time.Hour
+	// maxEmojiCacheEntries bounds the decoded-image cache. Expired entries are
+	// otherwise only dropped when the same emoji is looked up again, so one used
+	// once would stay resident for the life of the process.
+	maxEmojiCacheEntries = 256
+	// maxEmojiBytes and maxEmojiPixels bound a download. The URLs come from the
+	// workspace emoji list rather than the message, but a decoder fed an
+	// unbounded stream, or a small file that expands to a huge bitmap, can still
+	// exhaust the memory budget of the container.
+	maxEmojiBytes  = 1 << 20
+	maxEmojiPixels = 1 << 20
 )
 
 func NewMessageHandler(
@@ -325,13 +335,34 @@ func (h *MessageHandler) resolveEmojiImage(ctx context.Context, emojiMap map[str
 	}
 
 	h.cacheMu.Lock()
-	h.emojiCache[name] = emojiCacheEntry{
-		img:       img,
-		fetchedAt: time.Now(),
-	}
+	h.storeEmojiLocked(name, img, imageCacheTTL)
 	h.cacheMu.Unlock()
 
 	return img, nil
+}
+
+// storeEmojiLocked inserts img, first dropping entries past their TTL and then
+// the oldest ones if the cache is still full.
+func (h *MessageHandler) storeEmojiLocked(name string, img image.Image, ttl time.Duration) {
+	now := time.Now()
+	for key, entry := range h.emojiCache {
+		if now.Sub(entry.fetchedAt) >= ttl {
+			delete(h.emojiCache, key)
+		}
+	}
+
+	for len(h.emojiCache) >= maxEmojiCacheEntries {
+		oldestKey := ""
+		var oldest time.Time
+		for key, entry := range h.emojiCache {
+			if oldestKey == "" || entry.fetchedAt.Before(oldest) {
+				oldestKey, oldest = key, entry.fetchedAt
+			}
+		}
+		delete(h.emojiCache, oldestKey)
+	}
+
+	h.emojiCache[name] = emojiCacheEntry{img: img, fetchedAt: now}
 }
 
 func (h *MessageHandler) downloadAndDecodeEmoji(ctx context.Context, url, name string) (image.Image, error) {
@@ -352,7 +383,27 @@ func (h *MessageHandler) downloadAndDecodeEmoji(ctx context.Context, url, name s
 		return nil, fmt.Errorf("download failed with status: %d", resp.StatusCode)
 	}
 
-	img, _, err := image.Decode(resp.Body)
+	// Read one byte past the limit so an oversized body is reported as such
+	// rather than as a truncated image.
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxEmojiBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("read failed: %w", err)
+	}
+	if len(data) > maxEmojiBytes {
+		return nil, fmt.Errorf("emoji exceeds %d bytes", maxEmojiBytes)
+	}
+
+	// Check the dimensions before decoding: a small file can still expand into a
+	// bitmap far larger than the display needs.
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("decode config failed: %w", err)
+	}
+	if cfg.Width*cfg.Height > maxEmojiPixels {
+		return nil, fmt.Errorf("emoji is %dx%d, over the %d pixel limit", cfg.Width, cfg.Height, maxEmojiPixels)
+	}
+
+	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("decode failed: %w", err)
 	}

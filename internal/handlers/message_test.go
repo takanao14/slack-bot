@@ -1,12 +1,16 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"image"
+	"image/png"
 	"io"
 	"log/slog"
 	"net/http"
+	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -178,6 +182,104 @@ func TestImageCacheCanRemainValidWhenEmojiListCacheExpires(t *testing.T) {
 	}
 	if gotImg != img {
 		t.Fatal("expected resolver to return still-valid cached image")
+	}
+}
+
+func TestStoreEmojiLockedDropsExpiredEntries(t *testing.T) {
+	h := &MessageHandler{logger: testLogger(), emojiCache: map[string]emojiCacheEntry{
+		"stale": {img: image.NewRGBA(image.Rect(0, 0, 1, 1)), fetchedAt: time.Now().Add(-2 * time.Hour)},
+		"fresh": {img: image.NewRGBA(image.Rect(0, 0, 1, 1)), fetchedAt: time.Now()},
+	}}
+
+	h.storeEmojiLocked("new", image.NewRGBA(image.Rect(0, 0, 1, 1)), time.Hour)
+
+	if _, ok := h.emojiCache["stale"]; ok {
+		t.Fatal("expected the expired entry to be swept on insert")
+	}
+	for _, name := range []string{"fresh", "new"} {
+		if _, ok := h.emojiCache[name]; !ok {
+			t.Fatalf("expected %q to remain cached", name)
+		}
+	}
+}
+
+// Without a cap, an emoji used once stayed resident for the life of the process.
+func TestStoreEmojiLockedCapsCacheSize(t *testing.T) {
+	h := &MessageHandler{logger: testLogger(), emojiCache: map[string]emojiCacheEntry{}}
+
+	base := time.Now()
+	for i := 0; i < maxEmojiCacheEntries+50; i++ {
+		h.emojiCache["e"+strconv.Itoa(i)] = emojiCacheEntry{
+			img:       image.NewRGBA(image.Rect(0, 0, 1, 1)),
+			fetchedAt: base.Add(time.Duration(i) * time.Second),
+		}
+	}
+	h.storeEmojiLocked("newest", image.NewRGBA(image.Rect(0, 0, 1, 1)), time.Hour)
+
+	if len(h.emojiCache) > maxEmojiCacheEntries {
+		t.Fatalf("expected at most %d entries, got %d", maxEmojiCacheEntries, len(h.emojiCache))
+	}
+	if _, ok := h.emojiCache["newest"]; !ok {
+		t.Fatal("expected the new entry to be kept")
+	}
+	if _, ok := h.emojiCache["e0"]; ok {
+		t.Fatal("expected the oldest entry to be evicted first")
+	}
+}
+
+func TestDownloadAndDecodeEmojiRejectsOversizedBody(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(make([]byte, maxEmojiBytes+1))
+	}))
+	t.Cleanup(srv.Close)
+
+	h := &MessageHandler{logger: testLogger(), httpClient: srv.Client()}
+	_, err := h.downloadAndDecodeEmoji(context.Background(), srv.URL, "huge")
+	if err == nil || !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("expected an oversized-body error, got %v", err)
+	}
+}
+
+// A small file can still expand into a bitmap far larger than the display needs.
+func TestDownloadAndDecodeEmojiRejectsOversizedDimensions(t *testing.T) {
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, image.NewRGBA(image.Rect(0, 0, 2000, 2000))); err != nil {
+		t.Fatalf("failed to build fixture: %v", err)
+	}
+	if buf.Len() > maxEmojiBytes {
+		t.Fatalf("fixture must stay under the byte limit to exercise the pixel check, got %d", buf.Len())
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(buf.Bytes())
+	}))
+	t.Cleanup(srv.Close)
+
+	h := &MessageHandler{logger: testLogger(), httpClient: srv.Client()}
+	_, err := h.downloadAndDecodeEmoji(context.Background(), srv.URL, "bomb")
+	if err == nil || !strings.Contains(err.Error(), "pixel limit") {
+		t.Fatalf("expected a pixel-limit error, got %v", err)
+	}
+}
+
+func TestDownloadAndDecodeEmojiAcceptsNormalImage(t *testing.T) {
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, image.NewRGBA(image.Rect(0, 0, 64, 64))); err != nil {
+		t.Fatalf("failed to build fixture: %v", err)
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(buf.Bytes())
+	}))
+	t.Cleanup(srv.Close)
+
+	h := &MessageHandler{logger: testLogger(), httpClient: srv.Client()}
+	img, err := h.downloadAndDecodeEmoji(context.Background(), srv.URL, "ok")
+	if err != nil {
+		t.Fatalf("expected the download to succeed, got %v", err)
+	}
+	if got := img.Bounds().Dx(); got != 64 {
+		t.Fatalf("expected a 64px wide image, got %d", got)
 	}
 }
 
