@@ -9,6 +9,7 @@ import (
 	imagev1 "github.com/takanao14/led-image-api/gen/go/image/v1"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
@@ -20,7 +21,8 @@ type ImageClient struct {
 	timeout time.Duration
 }
 
-// NewImageClient creates a new ImageClient and connects to the gRPC server.
+// NewImageClient creates a new ImageClient. The connection is established
+// lazily so that an unavailable LED service cannot stop the bot from starting.
 func NewImageClient(addr string, connectTimeout, opTimeout time.Duration, logger *slog.Logger) (*ImageClient, error) {
 	// Service config for retries
 	// See: https://github.com/grpc/grpc/blob/master/doc/service_config.md
@@ -40,26 +42,49 @@ func NewImageClient(addr string, connectTimeout, opTimeout time.Duration, logger
 	dialOptions := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithDefaultServiceConfig(serviceConfig),
-		grpc.WithBlock(), // Block until the connection is established or fails
 	}
 	dialOptions = append(dialOptions, additionalDialOptions()...)
 
-	ctx, cancel := context.WithTimeout(context.Background(), connectTimeout)
-	defer cancel()
-
-	conn, err := grpc.DialContext(ctx, addr, dialOptions...)
+	conn, err := grpc.NewClient(addr, dialOptions...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to gRPC server within timeout at %s: %w", addr, err)
+		return nil, fmt.Errorf("failed to create gRPC client for %s: %w", addr, err)
 	}
 
-	logger.Info("Successfully connected to gRPC server", slog.String("addr", addr))
-
-	return &ImageClient{
+	c := &ImageClient{
 		conn:    conn,
 		client:  imagev1.NewImageServiceClient(conn),
 		logger:  logger,
 		timeout: opTimeout,
-	}, nil
+	}
+	c.warmUp(addr, connectTimeout)
+
+	return c, nil
+}
+
+// warmUp gives the LED service a bounded head start so the first message does
+// not pay the connection cost. An unreachable service is not fatal: the bot must
+// keep serving Slack, and each SendImage retries the connection on its own.
+func (c *ImageClient) warmUp(addr string, timeout time.Duration) {
+	c.conn.Connect()
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	for {
+		state := c.conn.GetState()
+		if state == connectivity.Ready {
+			c.logger.Info("Successfully connected to gRPC server", slog.String("addr", addr))
+			return
+		}
+		if !c.conn.WaitForStateChange(ctx, state) {
+			c.logger.Warn("LED service is not reachable yet, starting anyway",
+				slog.String("addr", addr),
+				slog.String("state", state.String()),
+				slog.Duration("waited", timeout),
+			)
+			return
+		}
+	}
 }
 
 // additionalDialOptions is a hook for injecting extra dial options, primarily for testing.

@@ -5,7 +5,6 @@ import (
 	"io"
 	"log/slog"
 	"net"
-	"strings"
 	"testing"
 	"time"
 
@@ -81,7 +80,8 @@ func TestNewImageClientConnectsToInMemoryServer(t *testing.T) {
 	t.Cleanup(func() { _ = c.Close() })
 }
 
-func TestNewImageClientTimesOutWhenConnectionNeverBecomesReady(t *testing.T) {
+// An unreachable LED service must not stop the bot from starting.
+func TestNewImageClientSucceedsWhenConnectionNeverBecomesReady(t *testing.T) {
 	withDialOptions(t,
 		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
 			<-ctx.Done()
@@ -89,12 +89,17 @@ func TestNewImageClientTimesOutWhenConnectionNeverBecomesReady(t *testing.T) {
 		}),
 	)
 
-	_, err := NewImageClient("passthrough:///never-ready", 50*time.Millisecond, time.Second, testLogger())
-	if err == nil {
-		t.Fatal("expected timeout error")
+	c, err := NewImageClient("passthrough:///never-ready", 50*time.Millisecond, time.Second, testLogger())
+	if err != nil {
+		t.Fatalf("expected client despite unreachable server, got error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "failed to connect to gRPC server within timeout") {
-		t.Fatalf("unexpected error message: %v", err)
+	if c == nil {
+		t.Fatal("expected client instance")
+	}
+	t.Cleanup(func() { _ = c.Close() })
+
+	if state := c.conn.GetState(); state == connectivity.Ready {
+		t.Fatalf("expected a not-ready connection, got %s", state)
 	}
 }
 
