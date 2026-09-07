@@ -417,3 +417,71 @@ func TestNewBotConstructsWithProvidedDependencies(t *testing.T) {
 		t.Fatal("expected nil text2img")
 	}
 }
+
+// blockingMessageHandler holds a handler inside the event loop until released.
+type blockingMessageHandler struct {
+	started chan struct{}
+	release chan struct{}
+}
+
+func (h *blockingMessageHandler) HandleAppMention(context.Context, *slackevents.AppMentionEvent) {}
+
+func (h *blockingMessageHandler) HandleMessage(context.Context, *slackevents.MessageEvent) {
+	close(h.started)
+	<-h.release
+}
+
+func (h *blockingMessageHandler) HandleEmojiChanged(context.Context, *slackevents.EmojiChangedEvent) {
+}
+
+// Closing the font face or the gRPC connection under a running handler is a
+// data race, so Shutdown must wait for the event loop to drain.
+func TestShutdownWaitsForInFlightEvent(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	cfg := &config.Config{Logger: logger}
+	msgHandler := &blockingMessageHandler{
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+
+	events := make(chan socketmode.Event, 1)
+	b := newBot(cfg, nil, nil, nil, nil, msgHandler)
+	b.events = events
+	b.ackRequest = func(socketmode.Request) {}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	if err := b.Run(ctx); err != nil {
+		t.Fatalf("expected Run to return without error, got %v", err)
+	}
+
+	events <- socketmode.Event{
+		Type: socketmode.EventTypeEventsAPI,
+		Data: slackevents.EventsAPIEvent{
+			Type:       slackevents.CallbackEvent,
+			InnerEvent: slackevents.EventsAPIInnerEvent{Data: &slackevents.MessageEvent{}},
+		},
+		Request: &socketmode.Request{},
+	}
+	<-msgHandler.started
+	cancel()
+
+	done := make(chan struct{})
+	go func() {
+		_ = b.Shutdown()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		t.Fatal("Shutdown returned while a handler was still running")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	close(msgHandler.release)
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Shutdown did not return after the handler finished")
+	}
+}

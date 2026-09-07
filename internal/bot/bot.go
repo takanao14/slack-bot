@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"slack-bot/internal/config"
@@ -36,6 +37,10 @@ type Bot struct {
 	runSocketMode  func(ctx context.Context) error
 	ackRequest     func(req socketmode.Request)
 	events         <-chan socketmode.Event
+
+	// Tracks the event goroutine so Shutdown cannot close the font face or the
+	// gRPC connection while a handler is still using them.
+	eventLoop sync.WaitGroup
 }
 
 // newBot is an internal constructor for the Bot struct.
@@ -174,7 +179,11 @@ func New(ctx context.Context, cfg *config.Config) (*Bot, error) {
 
 // Run starts the bot's event processing loop.
 func (b *Bot) Run(ctx context.Context) error {
-	go b.handleEvents(ctx)
+	b.eventLoop.Add(1)
+	go func() {
+		defer b.eventLoop.Done()
+		b.handleEvents(ctx)
+	}()
 
 	b.config.Logger.Info("Starting Slack bot with Socket Mode")
 	if b.runSocketMode != nil {
@@ -324,6 +333,11 @@ func (b *Bot) handleEventsAPI(ctx context.Context, evt socketmode.Event) {
 // Shutdown gracefully closes all resources held by the bot.
 func (b *Bot) Shutdown() error {
 	b.config.Logger.Info("Shutting down bot")
+
+	// An in-flight handler can still be rendering or sending an image. Both
+	// resources below are unsafe to close underneath it.
+	b.eventLoop.Wait()
+
 	var errs error
 
 	// Close Text2Image (font face)
