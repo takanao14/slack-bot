@@ -8,8 +8,13 @@ import (
 	"os/signal"
 	"slack-bot/internal/bot"
 	"slack-bot/internal/config"
+	"slack-bot/internal/health"
 	"syscall"
+	"time"
 )
+
+// healthShutdownTimeout bounds the wait for in-flight probes at exit.
+const healthShutdownTimeout = 5 * time.Second
 
 func main() {
 	if err := run(); err != nil {
@@ -31,6 +36,22 @@ func run() error {
 		return err
 	}
 	logger := cfg.Logger
+
+	// Start probing before the bot, whose auth.test retries can take tens of
+	// seconds. A probe must not fail while startup is still healthy.
+	if cfg.HealthAddr != "" {
+		healthServer := health.New(cfg.HealthAddr, logger)
+		if err := healthServer.Start(); err != nil {
+			return err
+		}
+		defer func() {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), healthShutdownTimeout)
+			defer cancel()
+			if err := healthServer.Shutdown(shutdownCtx); err != nil {
+				logger.Error("Failed to shut down health endpoint", "error", err)
+			}
+		}()
+	}
 
 	// Initialize the bot.
 	b, err := bot.New(ctx, cfg)

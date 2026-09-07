@@ -13,6 +13,7 @@ type Config struct {
 	BotToken                string
 	AppToken                string
 	FontPath                string
+	HealthAddr              string
 	LEDAddr                 string
 	LEDConnectTimeout       time.Duration
 	LEDOperationTimeout     time.Duration
@@ -47,6 +48,9 @@ func Load() (*Config, error) {
 	}
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel}))
 
+	// An empty address disables the listener, which suits deployments that do
+	// not probe the bot.
+	healthAddr := getEnv("SLACK_BOT_HEALTH_ADDR", ":8080")
 	ledAddr := getEnv("SLACK_BOT_LED_ADDR", "localhost:50051")
 	ledImageDurationSeconds := getEnvAsInt32(logger, "SLACK_BOT_LED_IMAGE_DURATION_SECONDS", 10)
 	ledConnectTimeout := getEnvAsDuration(logger, "SLACK_BOT_LED_CONNECT_TIMEOUT_SECONDS", 10*time.Second)
@@ -58,6 +62,7 @@ func Load() (*Config, error) {
 		BotToken:                botToken,
 		AppToken:                appToken,
 		FontPath:                fontPath,
+		HealthAddr:              healthAddr,
 		LEDAddr:                 ledAddr,
 		LEDConnectTimeout:       ledConnectTimeout,
 		LEDOperationTimeout:     ledOperationTimeout,

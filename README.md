@@ -21,6 +21,7 @@ slack-bot/
 │   ├── bot/           # Socket Mode event loop
 │   ├── config/        # Environment configuration
 │   ├── handlers/      # Slack event handlers
+│   ├── health/        # Liveness probe endpoint
 │   └── image/         # Text and emoji rendering
 ├── pkg/
 │   └── led/client/    # LED service client
@@ -38,6 +39,7 @@ Set the required variables and any optional overrides:
 export SLACK_BOT_TOKEN="xoxb-your-bot-token"
 export SLACK_APP_TOKEN="xapp-your-app-token"
 export SLACK_BOT_FONT_PATH="/path/to/font.ttf"
+export SLACK_BOT_HEALTH_ADDR=":8080"                            # Optional; default: :8080, empty disables
 export SLACK_BOT_LED_ADDR="localhost:50051"                     # Optional; default: localhost:50051
 export SLACK_BOT_LED_IMAGE_DURATION_SECONDS="10"                # Optional; seconds, default: 10
 export SLACK_BOT_LED_CONNECT_TIMEOUT_SECONDS="10"               # Optional; seconds, default: 10
@@ -149,6 +151,13 @@ Mention the bot (for example, `@your-bot Hello`) to receive a response.
 
 Channel messages are rendered as PPM images and sent to the LED service over gRPC.
 Both custom Slack emojis and Unicode emojis are supported.
+
+## Health Endpoint
+
+`GET /healthz` on `SLACK_BOT_HEALTH_ADDR` returns 200 while the process is
+running, for container liveness probes. It starts before the Slack connection so
+that a probe does not fail during `auth.test` retries. Set the variable to an
+empty string to run without a listener.
 
 ## Logging
 
