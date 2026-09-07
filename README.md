@@ -54,14 +54,15 @@ export DEBUG="true"                                             # Optional; enab
 1. Create an app at [Slack API](https://api.slack.com/apps).
 2. Enable **Socket Mode**.
 3. Under **Event Subscriptions**, subscribe to:
-   - `app_mention`
    - `message.channels`
    - `emoji_changed`
+   - `app_mention` is optional; a mention also arrives as a channel message, and
+     only that copy is rendered.
 4. Under **OAuth & Permissions**, add:
-   - `app_mentions:read`
    - `chat:write`
    - `channels:history`
    - `emoji:read` for custom emojis
+   - `app_mentions:read` only if `app_mention` is subscribed
 5. Copy the Bot User OAuth Token and App-Level Token.
 
 ## Build and Run
@@ -108,6 +109,30 @@ make clean   # Remove build artifacts
 make fmt     # Format the code
 make lint    # Run the linter
 ```
+
+## Deployment
+
+Images are published to `ghcr.io/takanao14/slack-bot` by CI on `v*` tags; pull
+requests build without pushing. The tag becomes the version reported on the
+first log line.
+
+Only `SLACK_BOT_TOKEN` and `SLACK_APP_TOKEN` are secret. Every other variable
+above is plain configuration, and `SLACK_BOT_FONT_PATH` should be left unset so
+that the bundled font is used.
+
+- **`terminationGracePeriodSeconds` must exceed
+  `SLACK_BOT_LED_OPERATION_TIMEOUT_SECONDS`**; 60 covers the default of 30.
+  Shutdown drains the event loop before closing the font face and the gRPC
+  connection, because closing them under a running handler is a data race, and
+  an in-flight send can hold the drain for the whole operation timeout.
+- **Replicas are safe to scale.** Slack allows an app up to 10 Socket Mode
+  connections and delivers each event to exactly one of them, so a rolling
+  update never renders a message twice. Each Pod keeps its own emoji cache, so
+  every extra replica repeats the emoji lookups.
+- **The LED connection is plaintext gRPC**, dialled outbound to
+  `SLACK_BOT_LED_ADDR` and established lazily. An unreachable LED service logs a
+  warning rather than stopping the bot from starting.
+- **Probe `GET /healthz`** on the `SLACK_BOT_HEALTH_ADDR` port, 8080 by default.
 
 ## Usage
 
