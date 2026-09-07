@@ -1,0 +1,60 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "helpers:pinGitHubActionDigests",
+    ":semanticCommits",
+    ":separateMajorReleases",
+    ":combinePatchMinorReleases",
+    ":rebaseStalePrs"
+  ],
+  "semanticCommitType": "build",
+  "timezone": "Asia/Tokyo",
+  "minimumReleaseAge": "1 day",
+  "labels": ["dependencies", "renovate", "manual-review"],
+  "osvVulnerabilityAlerts": true,
+  "vulnerabilityAlerts": {
+    "labels": ["dependencies", "renovate", "manual-review", "security"],
+    "assignees": ["takanao14"],
+    "minimumReleaseAge": null
+  },
+  "packageRules": [
+    {
+      "description": "Use version tags for GitHub-authored actions; retain digest pinning for third-party actions.",
+      "matchManagers": ["github-actions"],
+      "matchPackageNames": ["actions/**", "github/**"],
+      "pinDigests": false
+    },
+    {
+      "description": "led-image-api carries the gRPC bindings shared with led-service2, so a bump must be checked against the version actually deployed on the device.",
+      "matchManagers": ["gomod"],
+      "matchPackageNames": ["github.com/takanao14/led-image-api"],
+      "labels": ["dependencies", "renovate", "manual-review", "led-api"]
+    },
+    {
+      "description": "The bundled display font is pinned by two SHA-256 checksums Renovate cannot recompute, so the version bump alone leaves the build failing until they are refreshed.",
+      "matchPackageNames": ["googlefonts/morisawa-biz-ud-gothic"],
+      "labels": ["dependencies", "renovate", "manual-review", "font"],
+      "prBodyNotes": [
+        "Refresh `FONT_SHA256` and `LICENSE_SHA256` in the `Dockerfile` before merging. `docker build` fails on a mismatch, so an unrefreshed bump cannot reach the registry."
+      ]
+    },
+    {
+      "description": "Never auto-merge major updates.",
+      "matchUpdateTypes": ["major"],
+      "automerge": false,
+      "labels": ["dependencies", "renovate", "manual-review", "major-update"]
+    }
+  ],
+  "customManagers": [
+    {
+      "description": "Display font pinned in the Dockerfile; the release tags are not strict semver.",
+      "customType": "regex",
+      "managerFilePatterns": ["/(^|/)Dockerfile$/"],
+      "matchStrings": ["ARG FONT_VERSION=(?<currentValue>\\S+)"],
+      "depNameTemplate": "googlefonts/morisawa-biz-ud-gothic",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "loose"
+    }
+  ]
+}
