@@ -12,6 +12,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -83,6 +84,58 @@ func NewMessageHandler(
 	}
 }
 
+// slackEntityRe matches the <...> spans Slack wraps mentions, channels, links
+// and special commands in.
+var slackEntityRe = regexp.MustCompile(`<([^<>]*)>`)
+
+// slackEscapes reverses the three characters Slack escapes in message text.
+var slackEscapes = strings.NewReplacer("&lt;", "<", "&gt;", ">", "&amp;", "&")
+
+// decodeSlackText turns Slack's wire format into what the author saw when they
+// typed it. Entity spans are replaced before the escapes are reversed, so an
+// escaped "<" in the original message is never mistaken for markup.
+func decodeSlackText(s string) string {
+	decoded := slackEntityRe.ReplaceAllStringFunc(s, func(match string) string {
+		return decodeSlackEntity(match[1 : len(match)-1])
+	})
+	return slackEscapes.Replace(decoded)
+}
+
+// decodeSlackEntity renders one <...> span. Slack supplies a label after a pipe
+// for most spans; without one only the raw ID is available.
+func decodeSlackEntity(body string) string {
+	label := ""
+	if i := strings.Index(body, "|"); i >= 0 {
+		label, body = body[i+1:], body[:i]
+	}
+
+	switch {
+	case strings.HasPrefix(body, "@"):
+		return "@" + fallback(label, body[1:])
+	case strings.HasPrefix(body, "#"):
+		return "#" + fallback(label, body[1:])
+	case strings.HasPrefix(body, "!subteam^"):
+		// The label already carries its own "@".
+		return fallback(label, "@group")
+	case strings.HasPrefix(body, "!"):
+		// here, channel, everyone, and the date spans, whose label is the
+		// preformatted fallback text.
+		if label != "" {
+			return label
+		}
+		return "@" + body[1:]
+	default:
+		return fallback(label, body)
+	}
+}
+
+func fallback(label, raw string) string {
+	if label != "" {
+		return label
+	}
+	return raw
+}
+
 // handledSubTypes lists the message subtypes that carry new text to display.
 // Anything else either announces no new content (joins, topic changes) or keeps
 // the author and text under ev.Message, where the self-post guard cannot reach
@@ -152,6 +205,8 @@ func (h *MessageHandler) HandleMessage(ctx context.Context, ev *slackevents.Mess
 			messageText = extracted
 		}
 	}
+
+	messageText = decodeSlackText(messageText)
 
 	h.logger.Debug("Message event received",
 		slog.String("channel", ev.Channel),

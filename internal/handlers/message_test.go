@@ -250,6 +250,40 @@ func TestHandleMessageIgnoresOwnPosts(t *testing.T) {
 	}
 }
 
+func TestDecodeSlackText(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "plain text is untouched", input: "hello world", want: "hello world"},
+		{name: "labelled user mention", input: "hi <@U5E3582NN|takanao>", want: "hi @takanao"},
+		{name: "bare user mention falls back to the id", input: "hi <@U5E3582NN>", want: "hi @U5E3582NN"},
+		{name: "labelled channel", input: "see <#C5H95KWNP|general>", want: "see #general"},
+		{name: "bare channel falls back to the id", input: "see <#C5H95KWNP>", want: "see #C5H95KWNP"},
+		{name: "bare link", input: "<https://example.com>", want: "https://example.com"},
+		{name: "labelled link uses the label", input: "<https://example.com|Example>", want: "Example"},
+		{name: "mailto", input: "<mailto:a@example.com|a@example.com>", want: "a@example.com"},
+		{name: "here", input: "<!here> deploy done", want: "@here deploy done"},
+		{name: "channel command", input: "<!channel>", want: "@channel"},
+		{name: "user group uses its label", input: "<!subteam^S123|@sre>", want: "@sre"},
+		{name: "user group without a label", input: "<!subteam^S123>", want: "@group"},
+		{name: "date span uses the fallback label", input: "at <!date^1697000000^{date_short}|Oct 11, 2023>", want: "at Oct 11, 2023"},
+		{name: "escapes are restored", input: "a &amp; b &lt; c &gt; d", want: "a & b < c > d"},
+		{name: "escaped angle brackets are not parsed as markup", input: "&lt;@U5E3582NN&gt;", want: "<@U5E3582NN>"},
+		{name: "mixed", input: "<@U1|ken> pushed &amp; deployed <https://ci/1|build 1> <!here>", want: "@ken pushed & deployed build 1 @here"},
+		{name: "emoji tokens survive", input: "done <@U1|ken> :tada:", want: "done @ken :tada:"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := decodeSlackText(tt.input); got != tt.want {
+				t.Fatalf("decodeSlackText(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestIsHandledSubType(t *testing.T) {
 	tests := []struct {
 		subType string
