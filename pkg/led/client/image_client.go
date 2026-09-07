@@ -26,6 +26,10 @@ type ImageClient struct {
 func NewImageClient(addr string, connectTimeout, opTimeout time.Duration, logger *slog.Logger) (*ImageClient, error) {
 	// Service config for retries
 	// See: https://github.com/grpc/grpc/blob/master/doc/service_config.md
+	//
+	// Only UNAVAILABLE is retried. SendImage puts a picture on a physical
+	// display, so it is not idempotent, and INTERNAL can be returned after the
+	// server has already acted -- retrying it would show the image twice.
 	serviceConfig := `{
 		"methodConfig": [{
 			"name": [{"service": "image.v1.ImageService"}],
@@ -34,7 +38,7 @@ func NewImageClient(addr string, connectTimeout, opTimeout time.Duration, logger
 				"initialBackoff": "0.1s",
 				"maxBackoff": "1s",
 				"backoffMultiplier": 2,
-				"retryableStatusCodes": ["UNAVAILABLE", "INTERNAL"]
+				"retryableStatusCodes": ["UNAVAILABLE"]
 			}
 		}]
 	}`
