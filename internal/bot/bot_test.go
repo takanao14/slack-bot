@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"slack-bot/internal/config"
+	"slack-bot/internal/metrics"
 
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
@@ -489,5 +490,37 @@ func TestShutdownWaitsForInFlightEvent(t *testing.T) {
 	case <-done:
 	case <-time.After(2 * time.Second):
 		t.Fatal("Shutdown did not return after the handler finished")
+	}
+}
+
+// socketConnectedValue reads the gauge the connection events maintain.
+func socketConnectedValue(t *testing.T) float64 {
+	t.Helper()
+
+	families, err := metrics.Gatherer().Gather()
+	if err != nil {
+		t.Fatalf("expected to gather metrics, got %v", err)
+	}
+	for _, family := range families {
+		if family.GetName() != "slack_bot_socket_connected" {
+			continue
+		}
+		return family.GetMetric()[0].GetGauge().GetValue()
+	}
+	t.Fatal("expected the socket_connected gauge to be registered")
+	return 0
+}
+
+func TestHandleEventTracksSocketConnectionState(t *testing.T) {
+	b, _, _, _ := newTestBot(t)
+
+	b.handleEvent(context.Background(), socketmode.Event{Type: socketmode.EventTypeConnected})
+	if got := socketConnectedValue(t); got != 1 {
+		t.Fatalf("expected the gauge to be 1 after connecting, got %v", got)
+	}
+
+	b.handleEvent(context.Background(), socketmode.Event{Type: socketmode.EventTypeInvalidAuth})
+	if got := socketConnectedValue(t); got != 0 {
+		t.Fatalf("expected the gauge to be 0 after an auth rejection, got %v", got)
 	}
 }

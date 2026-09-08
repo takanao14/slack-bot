@@ -21,8 +21,9 @@ slack-bot/
 │   ├── bot/           # Socket Mode event loop
 │   ├── config/        # Environment configuration
 │   ├── handlers/      # Slack event handlers
-│   ├── health/        # Liveness probe endpoint
-│   └── image/         # Text and emoji rendering
+│   ├── httpserver/    # Liveness probe and metrics endpoints
+│   ├── image/         # Text and emoji rendering
+│   └── metrics/       # Prometheus collectors
 ├── pkg/
 │   └── led/client/    # LED service client
 ├── go.mod
@@ -133,6 +134,7 @@ that the bundled font is used.
   `SLACK_BOT_LED_ADDR` and established lazily. An unreachable LED service logs a
   warning rather than stopping the bot from starting.
 - **Probe `GET /healthz`** on the `SLACK_BOT_HEALTH_ADDR` port, 8080 by default.
+  `GET /metrics` on the same port serves Prometheus.
 
 ## Usage
 
@@ -141,12 +143,28 @@ that the bundled font is used.
 Channel messages are rendered as PPM images and sent to the LED service over gRPC.
 Both custom Slack emojis and Unicode emojis are supported.
 
-## Health Endpoint
+## HTTP Endpoints
 
-`GET /healthz` on `SLACK_BOT_HEALTH_ADDR` returns 200 while the process is
-running, for container liveness probes. It starts before the Slack connection so
-that a probe does not fail during `auth.test` retries. Set the variable to an
-empty string to run without a listener.
+Both endpoints share the `SLACK_BOT_HEALTH_ADDR` listener, which starts before
+the Slack connection so that a probe does not fail during `auth.test` retries.
+Set the variable to an empty string to run without a listener.
+
+`GET /healthz` returns 200 while the process is running, for container liveness
+probes. It deliberately does not report the Slack connection: a Slack outage
+would otherwise restart the pod in a loop without fixing anything.
+
+`GET /metrics` serves Prometheus. Beside the Go runtime collectors:
+
+| Metric | Type | Meaning |
+|---|---|---|
+| `slack_bot_socket_connected` | gauge | Whether the Socket Mode connection is established |
+| `slack_bot_led_send_total{result}` | counter | LED image sends by outcome |
+| `slack_bot_led_send_duration_seconds` | histogram | Time spent in a LED image send |
+| `slack_bot_messages_rendered_total` | counter | Messages rendered to an image |
+| `slack_bot_render_failures_total` | counter | Messages that could not be rendered |
+
+`slack_bot_socket_connected` is the only signal that separates a disconnected
+bot from a working one, because the process stays healthy either way.
 
 ## Logging
 

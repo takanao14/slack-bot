@@ -19,6 +19,7 @@ import (
 	"time"
 
 	slackbotimage "slack-bot/internal/image"
+	"slack-bot/internal/metrics"
 	ledclient "slack-bot/pkg/led/client"
 
 	"github.com/enescakir/emoji"
@@ -267,8 +268,10 @@ func (h *MessageHandler) processMessageImage(ctx context.Context, text string) e
 
 	imageData, err := h.text2img.RenderTextWithEmoji(text, resolver)
 	if err != nil {
+		metrics.IncRenderFailure()
 		return err
 	}
+	metrics.IncMessageRendered()
 
 	if h.ledClient != nil {
 		width, height, parseErr := parsePPMSize(imageData)
@@ -276,12 +279,16 @@ func (h *MessageHandler) processMessageImage(ctx context.Context, text string) e
 			h.logger.Warn("Failed to parse PPM size", slog.Any("error", parseErr))
 		}
 
+		// Instrumented here rather than inside pkg/led/client, which is public
+		// library code that should not carry a metrics dependency.
+		sendStart := time.Now()
 		_, sendErr := h.ledClient.SendImage(
 			ctx,
 			imageData,
 			"image/x-portable-pixmap",
 			h.imageDuration,
 		)
+		metrics.ObserveLEDSend(time.Since(sendStart), sendErr)
 		if sendErr != nil {
 			h.logger.Error("Failed to send image via gRPC", slog.Any("error", sendErr))
 			return sendErr
