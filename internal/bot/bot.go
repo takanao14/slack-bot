@@ -11,6 +11,7 @@ import (
 	"slack-bot/internal/config"
 	"slack-bot/internal/handlers"
 	"slack-bot/internal/image"
+	"slack-bot/internal/metrics"
 	ledclient "slack-bot/pkg/led/client"
 
 	"github.com/slack-go/slack"
@@ -221,6 +222,7 @@ func (b *Bot) handleEvents(ctx context.Context) {
 func (b *Bot) handleEvent(ctx context.Context, evt socketmode.Event) {
 	switch evt.Type {
 	case socketmode.EventTypeConnecting:
+		metrics.SetSocketConnected(false)
 		b.config.Logger.Info("Connecting to Slack with Socket Mode...")
 
 	case socketmode.EventTypeConnectionError:
@@ -232,9 +234,11 @@ func (b *Bot) handleEvent(ctx context.Context, evt socketmode.Event) {
 				slog.Duration("backoff", ev.Backoff),
 			)
 		}
+		metrics.SetSocketConnected(false)
 		b.config.Logger.Error("Connection failed, retrying", attrs...)
 
 	case socketmode.EventTypeConnected:
+		metrics.SetSocketConnected(true)
 		b.config.Logger.Info("Connected to Slack with Socket Mode")
 
 	case socketmode.EventTypeHello:
@@ -245,6 +249,7 @@ func (b *Bot) handleEvent(ctx context.Context, evt socketmode.Event) {
 
 	// Slack regularly cycles connections; socketmode reconnects automatically.
 	case socketmode.EventTypeIncomingError:
+		metrics.SetSocketConnected(false)
 		b.config.Logger.Warn("Socket Mode connection error, reconnecting",
 			slog.Any("error", eventError(evt.Data)),
 		)
@@ -265,6 +270,7 @@ func (b *Bot) handleEvent(ctx context.Context, evt socketmode.Event) {
 
 	// Invalid auth stops socketmode.
 	case socketmode.EventTypeInvalidAuth:
+		metrics.SetSocketConnected(false)
 		b.config.Logger.Error("Slack rejected the app-level token, check SLACK_APP_TOKEN")
 
 	default:

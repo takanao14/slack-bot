@@ -25,7 +25,7 @@
     - `pkg/`: Public library code that can be used by other projects (e.g., gRPC client).
 
 ## Slack Bot Specifics
-- **Socket Mode**: The bot uses Slack Socket Mode. Do not add HTTP server listeners unless explicitly required. The `/healthz` listener in `internal/health` is the sanctioned exception, required by container liveness probes.
+- **Socket Mode**: The bot uses Slack Socket Mode. Do not add HTTP server listeners unless explicitly required. The listener in `internal/httpserver` is the sanctioned exception, serving `/healthz` for container liveness probes and `/metrics` for Prometheus.
 - **Event Handling**: Handle events asynchronously where appropriate, but ensure shared resources are thread-safe.
 - **Image Rendering**: Message text and emojis are rendered into images (PPM format) before being sent to the LED display.
 

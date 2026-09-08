@@ -1,7 +1,8 @@
-// Package health serves the HTTP endpoint container orchestrators probe.
-// Socket Mode needs no listener of its own, so this is the only one the bot
-// opens, and it stays optional for deployments that do not probe.
-package health
+// Package httpserver serves the endpoints that observe the bot: /healthz for
+// container probes and /metrics for scraping. Socket Mode needs no listener of
+// its own, so this is the only one the bot opens, and it stays optional for
+// deployments that neither probe nor scrape.
+package httpserver
 
 import (
 	"context"
@@ -11,19 +12,21 @@ import (
 	"net"
 	"net/http"
 	"time"
+
+	"slack-bot/internal/metrics"
 )
 
 // readHeaderTimeout bounds slow-loris probes against the listener.
 const readHeaderTimeout = 5 * time.Second
 
-// Server serves liveness probes.
+// Server serves liveness probes and the metrics exposition.
 type Server struct {
 	http     *http.Server
 	listener net.Listener
 	logger   *slog.Logger
 }
 
-// New builds a health server for addr.
+// New builds an observability server for addr.
 func New(addr string, logger *slog.Logger) *Server {
 	return &Server{
 		http: &http.Server{
@@ -41,6 +44,7 @@ func newMux() *http.ServeMux {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok\n"))
 	})
+	mux.Handle("GET /metrics", metrics.Handler())
 	return mux
 }
 
@@ -53,11 +57,11 @@ func (s *Server) Start() error {
 	}
 	s.listener = listener
 
-	s.logger.Info("Health endpoint listening", slog.String("addr", listener.Addr().String()))
+	s.logger.Info("HTTP endpoints listening", slog.String("addr", listener.Addr().String()))
 
 	go func() {
 		if err := s.http.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			s.logger.Error("Health endpoint stopped", slog.Any("error", err))
+			s.logger.Error("HTTP endpoints stopped", slog.Any("error", err))
 		}
 	}()
 	return nil

@@ -1,4 +1,4 @@
-package health
+package httpserver
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -78,5 +79,21 @@ func TestStartReturnsErrorWhenPortIsTaken(t *testing.T) {
 	if err := second.Start(); err == nil {
 		t.Fatal("expected Start to fail on a taken port")
 		_ = second.Shutdown(context.Background())
+	}
+}
+
+func TestMetricsEndpointServesExposition(t *testing.T) {
+	rec := httptest.NewRecorder()
+	newMux().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	body, err := io.ReadAll(rec.Body)
+	if err != nil {
+		t.Fatalf("expected to read the body, got %v", err)
+	}
+	if !strings.Contains(string(body), "slack_bot_socket_connected") {
+		t.Fatal("expected the exposition to carry the bot's own collectors")
 	}
 }
