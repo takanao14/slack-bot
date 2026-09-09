@@ -6,7 +6,7 @@ require (
 	github.com/enescakir/emoji v1.0.0
 	github.com/prometheus/client_golang v1.24.1
 	github.com/slack-go/slack v0.29.0
-	github.com/takanao14/led-image-api v0.1.4
+	github.com/takanao14/led-image-api v0.1.5
 	golang.org/x/image v0.45.0
 	google.golang.org/grpc v1.83.2
 )
