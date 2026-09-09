@@ -1,6 +1,4 @@
-// Package metrics defines the instrumentation served on /metrics. Collectors
-// are package-level because the call sites are spread across the event loop,
-// the message handler, and the LED send path.
+// Package metrics provides Prometheus instrumentation for /metrics.
 package metrics
 
 import (
@@ -29,8 +27,7 @@ var (
 		Help:      "LED image sends by outcome.",
 	}, []string{"result"})
 
-	// A send crosses the LAN to a single device, so the interesting range is
-	// milliseconds up to the operation timeout.
+	// Buckets cover LAN latency through the operation timeout.
 	ledSendDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
 		Namespace: namespace,
 		Name:      "led_send_duration_seconds",
@@ -62,8 +59,7 @@ func init() {
 		renderFailures,
 	)
 
-	// Initialize both label values so that "no failures yet" is a zero sample
-	// rather than a missing series an alert expression cannot evaluate.
+	// Pre-create label values so alerts can evaluate zero samples.
 	ledSendTotal.WithLabelValues("ok")
 	ledSendTotal.WithLabelValues("error")
 }
@@ -97,12 +93,12 @@ func IncRenderFailure() {
 	renderFailures.Inc()
 }
 
-// Handler serves the exposition endpoint.
+// Handler serves Prometheus metrics.
 func Handler() http.Handler {
 	return promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
 }
 
-// Gatherer exposes the registry so that tests can read collected samples.
+// Gatherer returns the registry for tests.
 func Gatherer() prometheus.Gatherer {
 	return registry
 }

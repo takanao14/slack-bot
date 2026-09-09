@@ -21,15 +21,12 @@ type ImageClient struct {
 	timeout time.Duration
 }
 
-// NewImageClient creates a new ImageClient. The connection is established
-// lazily so that an unavailable LED service cannot stop the bot from starting.
+// NewImageClient creates an ImageClient. It connects lazily so an unavailable
+// LED service does not prevent the bot from starting.
 func NewImageClient(addr string, connectTimeout, opTimeout time.Duration, logger *slog.Logger) (*ImageClient, error) {
-	// Service config for retries
+	// Retry only UNAVAILABLE. The server may return INTERNAL after displaying the
+	// image, and retrying it could display the image twice.
 	// See: https://github.com/grpc/grpc/blob/master/doc/service_config.md
-	//
-	// Only UNAVAILABLE is retried. SendImage puts a picture on a physical
-	// display, so it is not idempotent, and INTERNAL can be returned after the
-	// server has already acted -- retrying it would show the image twice.
 	serviceConfig := `{
 		"methodConfig": [{
 			"name": [{"service": "image.v1.ImageService"}],
@@ -65,9 +62,8 @@ func NewImageClient(addr string, connectTimeout, opTimeout time.Duration, logger
 	return c, nil
 }
 
-// warmUp gives the LED service a bounded head start so the first message does
-// not pay the connection cost. An unreachable service is not fatal: the bot must
-// keep serving Slack, and each SendImage retries the connection on its own.
+// warmUp attempts a connection within the timeout to reduce first-message latency.
+// Failure is non-fatal because SendImage reconnects.
 func (c *ImageClient) warmUp(addr string, timeout time.Duration) {
 	c.conn.Connect()
 
@@ -91,14 +87,13 @@ func (c *ImageClient) warmUp(addr string, timeout time.Duration) {
 	}
 }
 
-// additionalDialOptions is a hook for injecting extra dial options, primarily for testing.
+// additionalDialOptions injects dial options in tests.
 var additionalDialOptions = func() []grpc.DialOption {
 	return nil
 }
 
 // SendImage sends image data to the LED display service.
 func (c *ImageClient) SendImage(ctx context.Context, imageData []byte, mimeType string, durationSeconds int32) (*imagev1.SendImageResponse, error) {
-	// Apply the operation timeout to the context.
 	opCtx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 

@@ -8,8 +8,6 @@ import (
 	"time"
 )
 
-// Defaults live here so that a single place defines them; the consumers use
-// whatever Load hands them.
 const (
 	defaultEmojiListCacheTTL  = 24 * time.Hour
 	defaultEmojiImageCacheTTL = 24 * time.Hour
@@ -55,8 +53,7 @@ func Load() (*Config, error) {
 	}
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel}))
 
-	// An empty address disables the listener, which suits deployments that do
-	// not probe the bot.
+	// An empty address disables health and metrics endpoints.
 	healthAddr := getEnv("SLACK_BOT_HEALTH_ADDR", ":8080")
 	ledAddr := getEnv("SLACK_BOT_LED_ADDR", "localhost:50051")
 	ledImageDurationSeconds := getEnvAsInt32(logger, "SLACK_BOT_LED_IMAGE_DURATION_SECONDS", 10)
@@ -81,7 +78,7 @@ func Load() (*Config, error) {
 	}, nil
 }
 
-// getRequiredEnv retrieves an environment variable or returns an error if it's missing.
+// getRequiredEnv returns a required environment variable.
 func getRequiredEnv(key string) (string, error) {
 	value := os.Getenv(key)
 	if value == "" {
@@ -90,7 +87,7 @@ func getRequiredEnv(key string) (string, error) {
 	return value, nil
 }
 
-// getEnv retrieves an environment variable or returns a default value.
+// getEnv returns an environment variable or its default.
 func getEnv(key, defaultValue string) string {
 	if value, exists := os.LookupEnv(key); exists {
 		return value
@@ -98,9 +95,7 @@ func getEnv(key, defaultValue string) string {
 	return defaultValue
 }
 
-// getEnvAsInt32 retrieves an environment variable as a positive int32 or returns
-// a default value. Parsing at 32 bits rejects the overflow a plain Atoi would
-// have wrapped silently.
+// getEnvAsInt32 returns a positive int32 environment value or its default.
 func getEnvAsInt32(logger *slog.Logger, key string, defaultValue int32) int32 {
 	strValue := getEnv(key, "")
 	if strValue == "" {
@@ -118,8 +113,7 @@ func getEnvAsInt32(logger *slog.Logger, key string, defaultValue int32) int32 {
 	return int32(intValue)
 }
 
-// getEnvAsDuration retrieves an environment variable as a positive number of
-// seconds or returns a default value.
+// getEnvAsDuration returns an environment value as positive seconds or its default.
 func getEnvAsDuration(logger *slog.Logger, key string, defaultValue time.Duration) time.Duration {
 	strValue := getEnv(key, "")
 	if strValue == "" {

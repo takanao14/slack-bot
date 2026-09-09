@@ -55,14 +55,9 @@ type emojiCacheEntry struct {
 }
 
 const (
-	// maxEmojiCacheEntries bounds the decoded-image cache. Expired entries are
-	// otherwise only dropped when the same emoji is looked up again, so one used
-	// once would stay resident for the life of the process.
+	// maxEmojiCacheEntries caps the decoded-image cache.
 	maxEmojiCacheEntries = 256
-	// maxEmojiBytes and maxEmojiPixels bound a download. The URLs come from the
-	// workspace emoji list rather than the message, but a decoder fed an
-	// unbounded stream, or a small file that expands to a huge bitmap, can still
-	// exhaust the memory budget of the container.
+	// These limits bound compressed and decoded image sizes to protect memory.
 	maxEmojiBytes  = 1 << 20
 	maxEmojiPixels = 1 << 20
 )
@@ -93,16 +88,14 @@ func NewMessageHandler(
 	}
 }
 
-// slackEntityRe matches the <...> spans Slack wraps mentions, channels, links
-// and special commands in.
+// slackEntityRe matches Slack entity spans such as mentions, channels, and links.
 var slackEntityRe = regexp.MustCompile(`<([^<>]*)>`)
 
 // slackEscapes reverses the three characters Slack escapes in message text.
 var slackEscapes = strings.NewReplacer("&lt;", "<", "&gt;", ">", "&amp;", "&")
 
-// decodeSlackText turns Slack's wire format into what the author saw when they
-// typed it. Entity spans are replaced before the escapes are reversed, so an
-// escaped "<" in the original message is never mistaken for markup.
+// decodeSlackText renders Slack entities and unescapes message text. Entities
+// are replaced first so an escaped "<" is not parsed as markup.
 func decodeSlackText(s string) string {
 	decoded := slackEntityRe.ReplaceAllStringFunc(s, func(match string) string {
 		return decodeSlackEntity(match[1 : len(match)-1])
@@ -110,8 +103,7 @@ func decodeSlackText(s string) string {
 	return slackEscapes.Replace(decoded)
 }
 
-// decodeSlackEntity renders one <...> span. Slack supplies a label after a pipe
-// for most spans; without one only the raw ID is available.
+// decodeSlackEntity renders an entity span, preferring its label to its raw ID.
 func decodeSlackEntity(body string) string {
 	label := ""
 	if i := strings.Index(body, "|"); i >= 0 {
@@ -127,8 +119,7 @@ func decodeSlackEntity(body string) string {
 		// The label already carries its own "@".
 		return fallback(label, "@group")
 	case strings.HasPrefix(body, "!"):
-		// here, channel, everyone, and the date spans, whose label is the
-		// preformatted fallback text.
+		// Date spans use their label as preformatted fallback text.
 		if label != "" {
 			return label
 		}
@@ -145,11 +136,8 @@ func fallback(label, raw string) string {
 	return raw
 }
 
-// handledSubTypes lists the message subtypes that carry new text to display.
-// Anything else either announces no new content (joins, topic changes) or keeps
-// the author and text under ev.Message, where the self-post guard cannot reach
-// them: message_changed arrives with an empty User and Text, so every edit would
-// otherwise slip past isOwnPost and render as "(empty message)".
+// handledSubTypes lists events with displayable text at the top level.
+// Excluding message_changed keeps its empty fields from bypassing the self-post filter.
 var handledSubTypes = map[string]struct{}{
 	"":                 {},
 	"bot_message":      {},
@@ -172,9 +160,7 @@ func (h *MessageHandler) isOwnPost(user, botID string) bool {
 	return h.identity.BotID != "" && botID == h.identity.BotID
 }
 
-// HandleAppMention only records the mention. Slack delivers a channel mention as
-// both app_mention and message, and HandleMessage already renders the text and
-// acknowledges it, so replying here too answered one mention twice.
+// HandleAppMention logs mentions; the matching message event handles the reply.
 func (h *MessageHandler) HandleAppMention(ctx context.Context, ev *slackevents.AppMentionEvent) {
 	_ = ctx
 	if h.isOwnPost(ev.User, ev.BotID) {
@@ -279,8 +265,7 @@ func (h *MessageHandler) processMessageImage(ctx context.Context, text string) e
 			h.logger.Warn("Failed to parse PPM size", slog.Any("error", parseErr))
 		}
 
-		// Instrumented here rather than inside pkg/led/client, which is public
-		// library code that should not carry a metrics dependency.
+		// Keep application metrics out of the public LED client package.
 		sendStart := time.Now()
 		_, sendErr := h.ledClient.SendImage(
 			ctx,
@@ -346,8 +331,7 @@ func (h *MessageHandler) resolveEmojiImage(ctx context.Context, emojiMap map[str
 	return img, nil
 }
 
-// storeEmojiLocked inserts img, first dropping entries past their TTL and then
-// the oldest ones if the cache is still full.
+// storeEmojiLocked removes expired or oldest entries before inserting img.
 func (h *MessageHandler) storeEmojiLocked(name string, img image.Image, ttl time.Duration) {
 	now := time.Now()
 	for key, entry := range h.emojiCache {
@@ -388,8 +372,7 @@ func (h *MessageHandler) downloadAndDecodeEmoji(ctx context.Context, url, name s
 		return nil, fmt.Errorf("download failed with status: %d", resp.StatusCode)
 	}
 
-	// Read one byte past the limit so an oversized body is reported as such
-	// rather than as a truncated image.
+	// Read past the limit to distinguish oversized data from a truncated image.
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxEmojiBytes+1))
 	if err != nil {
 		return nil, fmt.Errorf("read failed: %w", err)
@@ -398,8 +381,7 @@ func (h *MessageHandler) downloadAndDecodeEmoji(ctx context.Context, url, name s
 		return nil, fmt.Errorf("emoji exceeds %d bytes", maxEmojiBytes)
 	}
 
-	// Check the dimensions before decoding: a small file can still expand into a
-	// bitmap far larger than the display needs.
+	// Check dimensions before a small file can expand into a large bitmap.
 	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("decode config failed: %w", err)

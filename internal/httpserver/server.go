@@ -1,7 +1,4 @@
-// Package httpserver serves the endpoints that observe the bot: /healthz for
-// container probes and /metrics for scraping. Socket Mode needs no listener of
-// its own, so this is the only one the bot opens, and it stays optional for
-// deployments that neither probe nor scrape.
+// Package httpserver serves liveness and Prometheus endpoints.
 package httpserver
 
 import (
@@ -16,17 +13,17 @@ import (
 	"slack-bot/internal/metrics"
 )
 
-// readHeaderTimeout bounds slow-loris probes against the listener.
+// readHeaderTimeout limits time spent reading request headers.
 const readHeaderTimeout = 5 * time.Second
 
-// Server serves liveness probes and the metrics exposition.
+// Server serves liveness probes and Prometheus metrics.
 type Server struct {
 	http     *http.Server
 	listener net.Listener
 	logger   *slog.Logger
 }
 
-// New builds an observability server for addr.
+// New creates an observability server for addr.
 func New(addr string, logger *slog.Logger) *Server {
 	return &Server{
 		http: &http.Server{
@@ -48,8 +45,7 @@ func newMux() *http.ServeMux {
 	return mux
 }
 
-// Start binds the listener before serving so that a port conflict is reported
-// here instead of disappearing into the serving goroutine.
+// Start binds before serving so it can report port conflicts.
 func (s *Server) Start() error {
 	listener, err := net.Listen("tcp", s.http.Addr)
 	if err != nil {
@@ -67,8 +63,7 @@ func (s *Server) Start() error {
 	return nil
 }
 
-// Addr reports the bound address, which differs from the configured one when
-// the port was left to the kernel.
+// Addr returns the bound address, including a kernel-assigned port.
 func (s *Server) Addr() string {
 	if s.listener == nil {
 		return s.http.Addr
@@ -76,7 +71,7 @@ func (s *Server) Addr() string {
 	return s.listener.Addr().String()
 }
 
-// Shutdown stops serving and waits for in-flight probes.
+// Shutdown stops serving and waits for in-flight requests.
 func (s *Server) Shutdown(ctx context.Context) error {
 	return s.http.Shutdown(ctx)
 }

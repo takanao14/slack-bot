@@ -18,34 +18,28 @@ import (
 )
 
 const (
-	// DPI is the standard screen dots per inch.
+	// DPI is the font rendering resolution.
 	DPI = 72
-	// trailingPadding is the extra space added to the end of the rendered image.
+	// trailingPadding adds space after the rendered content.
 	trailingPadding = 16
-	// maxTextRunes bounds the rendered width. Slack accepts messages of roughly
-	// 40,000 characters, which at this height would allocate a canvas of tens of
-	// megabytes and then exceed the gRPC server's 4 MB default receive limit, so
-	// the send would fail only after the memory had been spent. A full-width
-	// glyph is as wide as the height, keeping the worst case here under 1 MB.
+	// maxTextRunes limits canvas allocation for long Slack messages.
 	maxTextRunes = 300
-	// ellipsis marks text cut short by maxTextRunes.
-	ellipsis = "…"
+	ellipsis     = "…"
 )
 
 var emojiTokenRe = regexp.MustCompile(`:([a-zA-Z0-9_+\-]+):`)
 
-// EmojiResolver is a function that resolves an emoji name to an image.
+// EmojiResolver resolves an emoji name to an image.
 type EmojiResolver func(name string) (image.Image, error)
 
-// Text2Image converts text strings, including emojis, into images.
+// Text2Image renders text and emojis as images.
 type Text2Image struct {
 	face   font.Face
 	height int
 	logger *slog.Logger
 }
 
-// NewText2Image creates a new Text2Image instance with the given font file and pixel height.
-// If pixelHeight is 0, it defaults to 32.
+// NewText2Image loads a font at pixelHeight. A zero height defaults to 32.
 func NewText2Image(fontPath string, pixelHeight int, logger *slog.Logger) (*Text2Image, error) {
 	if pixelHeight == 0 {
 		pixelHeight = 32
@@ -77,7 +71,7 @@ func NewText2Image(fontPath string, pixelHeight int, logger *slog.Logger) (*Text
 	}, nil
 }
 
-// Close closes the font face, releasing its resources.
+// Close releases the font face.
 func (t *Text2Image) Close() error {
 	if t.face != nil {
 		return t.face.Close()
@@ -85,14 +79,13 @@ func (t *Text2Image) Close() error {
 	return nil
 }
 
-// RenderTextWithEmoji renders text with emoji support into a PPM image byte slice.
-// Text like "Hello :emoji: World" will render with the emoji image embedded.
+// RenderTextWithEmoji renders text and :emoji: tokens as a PPM image.
 func (t *Text2Image) RenderTextWithEmoji(text string, resolve EmojiResolver) ([]byte, error) {
 	singleLine := strings.ReplaceAll(text, "\n", " ")
 	if strings.TrimSpace(singleLine) == "" {
 		singleLine = "(empty message)"
 	}
-	// Count runes so that multi-byte text is never split mid-character.
+	// Truncate by rune to avoid splitting UTF-8 characters.
 	if runes := []rune(singleLine); len(runes) > maxTextRunes {
 		t.logger.Info("Truncating message to bound the rendered image",
 			slog.Int("runes", len(runes)),
@@ -112,18 +105,15 @@ func (t *Text2Image) RenderTextWithEmoji(text string, resolve EmojiResolver) ([]
 		imgHeight = 1
 	}
 
-	// Create canvas
 	canvas := image.NewRGBA(image.Rect(0, 0, totalWidth, imgHeight))
 	imagedraw.Draw(canvas, canvas.Bounds(), &image.Uniform{C: color.Black}, image.Point{}, imagedraw.Src)
 
-	// Draw items onto the canvas
 	t.drawItems(canvas, items)
 
-	// Encode to PPM format
 	return encodePPM(canvas), nil
 }
 
-// calculateLayout determines the size and position of each text and emoji segment.
+// calculateLayout returns render items and their total width.
 func (t *Text2Image) calculateLayout(text string, resolve EmojiResolver) ([]renderItem, int) {
 	parts := splitEmojiParts(text)
 	emojiSize := t.height
@@ -136,7 +126,7 @@ func (t *Text2Image) calculateLayout(text string, resolve EmojiResolver) ([]rend
 			if src, err := resolve(p.value); err == nil && src != nil {
 				srcBounds := src.Bounds()
 				if srcBounds.Dy() > 0 {
-					// Scale emoji width based on aspect ratio and target height
+					// Preserve the aspect ratio at the target height.
 					w := srcBounds.Dx() * emojiSize / srcBounds.Dy()
 					if w < 1 {
 						w = 1
@@ -148,11 +138,10 @@ func (t *Text2Image) calculateLayout(text string, resolve EmojiResolver) ([]rend
 			}
 		}
 
-		// If the item is not a resolved emoji, treat it as text.
 		if item.img == nil {
 			txt := p.value
 			if p.isEmoji {
-				// Fallback for unresolved emoji: render the original token
+				// Preserve unresolved emoji tokens as text.
 				txt = ":" + p.value + ":"
 			}
 			item.width = t.measureTextWidth(txt)
@@ -165,24 +154,22 @@ func (t *Text2Image) calculateLayout(text string, resolve EmojiResolver) ([]rend
 	return items, totalWidth
 }
 
-// drawItems renders the pre-calculated layout items onto the canvas.
+// drawItems renders laid-out items onto the canvas.
 func (t *Text2Image) drawItems(canvas *image.RGBA, items []renderItem) {
 	x := 0
 	emojiSize := t.height
 	for _, item := range items {
 		if item.img != nil {
-			// Draw emoji image
 			dstRect := image.Rect(x, 0, x+item.width, emojiSize)
 			draw.ApproxBiLinear.Scale(canvas, dstRect, item.img, item.imgBounds, imagedraw.Over, nil)
 		} else if item.text != "" {
-			// Draw text segment
 			t.drawTextSegment(canvas, item.text, x)
 		}
 		x += item.width
 	}
 }
 
-// encodePPM encodes an image to PPM (Portable Pixmap) P6 binary format.
+// encodePPM encodes an RGBA image as binary PPM (P6).
 func encodePPM(img *image.RGBA) []byte {
 	bounds := img.Bounds()
 	width := bounds.Dx()
@@ -192,11 +179,9 @@ func encodePPM(img *image.RGBA) []byte {
 	// A wide strip reallocates a dozen times without this.
 	buf.Grow(width*height*3 + 32)
 
-	// PPM header (P6 format - binary)
 	fmt.Fprintf(&buf, "P6\n%d %d\n255\n", width, height)
 
-	// Read the pixel buffer directly; RGBA already stores the 8-bit,
-	// alpha-premultiplied values that At().RGBA() would return scaled to 16 bits.
+	// Pix already stores premultiplied 8-bit RGBA values.
 	for y := 0; y < height; y++ {
 		start := img.PixOffset(bounds.Min.X, bounds.Min.Y+y)
 		row := img.Pix[start : start+width*4]
@@ -208,13 +193,11 @@ func encodePPM(img *image.RGBA) []byte {
 	return buf.Bytes()
 }
 
-// part represents a segment of the input string, either plain text or an emoji token.
 type part struct {
 	isEmoji bool
 	value   string
 }
 
-// renderItem holds the information needed to render a single part of the message.
 type renderItem struct {
 	part      part
 	width     int
@@ -236,15 +219,12 @@ func splitEmojiParts(s string) []part {
 		fullStart, fullEnd := m[0], m[1]
 		nameStart, nameEnd := m[2], m[3]
 
-		// Add preceding text part if it exists
 		if pos < fullStart {
 			parts = append(parts, part{isEmoji: false, value: s[pos:fullStart]})
 		}
-		// Add emoji part
 		parts = append(parts, part{isEmoji: true, value: s[nameStart:nameEnd]})
 		pos = fullEnd
 	}
-	// Add trailing text part if it exists
 	if pos < len(s) {
 		parts = append(parts, part{isEmoji: false, value: s[pos:]})
 	}
@@ -265,23 +245,17 @@ func (t *Text2Image) measureTextWidth(s string) int {
 	return w
 }
 
-// drawTextSegment draws a single string of text onto the destination image.
-// It calculates the vertical position to center the text within the image's height.
+// drawTextSegment vertically centers and draws text.
 func (t *Text2Image) drawTextSegment(dst imagedraw.Image, s string, x int) {
 	if s == "" {
 		return
 	}
 
-	// Measure the bounding box of the text to be rendered.
-	// The bounds are relative to the baseline (0,0).
-	// Min.Y is the ascent (usually negative), Max.Y is the descent.
+	// Bounds are relative to the baseline; Min.Y is typically negative.
 	bounds, _ := font.BoundString(t.face, s)
 	textHeight := (bounds.Max.Y - bounds.Min.Y).Ceil()
 
-	// Calculate the Y position for the baseline to vertically center the text.
-	// 1. (t.height - textHeight) / 2 gives the top margin.
-	// 2. We subtract bounds.Min.Y (the ascent, which is negative) to move from the top of the text box to the baseline.
-	// The +1 is a small adjustment that often helps with visual alignment.
+	// Center the bounds, then convert their top edge to the baseline.
 	yOffset := (t.height-textHeight)/2 - bounds.Min.Y.Ceil() + 1
 
 	d := &font.Drawer{
