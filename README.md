@@ -42,7 +42,7 @@ export SLACK_APP_TOKEN="xapp-your-app-token"
 export SLACK_BOT_FONT_PATH="/path/to/font.ttf"
 export SLACK_BOT_HEALTH_ADDR=":8080"                            # Optional; default: :8080, empty disables
 export SLACK_BOT_LED_ADDR="localhost:50051"                     # Optional; default: localhost:50051
-export SLACK_BOT_LED_IMAGE_DURATION_SECONDS="10"                # Optional; seconds, default: 10
+export SLACK_BOT_LED_IMAGE_DURATION_SECONDS="10"                # Optional; main display seconds, default: 10
 export SLACK_BOT_LED_CONNECT_TIMEOUT_SECONDS="10"               # Optional; seconds, default: 10
 export SLACK_BOT_LED_OPERATION_TIMEOUT_SECONDS="30"             # Optional; seconds, default: 30
 export SLACK_BOT_EMOJI_LIST_CACHE_TTL_SECONDS="86400"           # Optional; seconds, default: 24h
@@ -124,6 +124,9 @@ Only `SLACK_BOT_TOKEN` and `SLACK_APP_TOKEN` are secrets. Leave `SLACK_BOT_FONT_
 
 Channel messages are rendered as PPM images and sent to the LED service over gRPC.
 Both custom Slack emojis and Unicode emojis are supported.
+`SLACK_BOT_LED_IMAGE_DURATION_SECONDS` controls the main image display time. It
+does not include server-side eye-catch playback, decoding, or display preparation;
+the LED service's overall worker timeout may still cap the display time.
 
 ## HTTP Endpoints
 

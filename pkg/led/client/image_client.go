@@ -93,7 +93,7 @@ var additionalDialOptions = func() []grpc.DialOption {
 }
 
 // SendImage sends image data to the LED display service.
-func (c *ImageClient) SendImage(ctx context.Context, imageData []byte, mimeType string, durationSeconds int32) (*imagev1.SendImageResponse, error) {
+func (c *ImageClient) SendImage(ctx context.Context, imageData []byte, mimeType string, displayDurationSeconds int32) (*imagev1.SendImageResponse, error) {
 	opCtx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 
@@ -102,13 +102,13 @@ func (c *ImageClient) SendImage(ctx context.Context, imageData []byte, mimeType 
 			ImageData: imageData,
 			MimeType:  mimeType,
 		},
-		DurationSeconds: durationSeconds,
+		DurationSeconds: displayDurationSeconds,
 	}
 
 	c.logger.Debug("Sending image to LED display",
 		slog.String("mime_type", mimeType),
 		slog.Int("size", len(imageData)),
-		slog.Int("duration", int(durationSeconds)),
+		slog.Int("display_duration_seconds", int(displayDurationSeconds)),
 	)
 
 	resp, err := c.client.SendImage(opCtx, req)

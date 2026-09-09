@@ -105,7 +105,10 @@ func TestNewImageClientSucceedsWhenConnectionNeverBecomesReady(t *testing.T) {
 
 func TestSendImageSuccess(t *testing.T) {
 	_, lis := startBufconnServer(t, &imageServiceServer{
-		sendImage: func(_ context.Context, _ *imagev1.SendImageRequest) (*imagev1.SendImageResponse, error) {
+		sendImage: func(_ context.Context, req *imagev1.SendImageRequest) (*imagev1.SendImageResponse, error) {
+			if req.DurationSeconds != 5 {
+				t.Fatalf("expected display duration 5, got %d", req.DurationSeconds)
+			}
 			return &imagev1.SendImageResponse{Success: true, Message: "sent"}, nil
 		},
 	})
