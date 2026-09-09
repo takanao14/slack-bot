@@ -43,8 +43,7 @@ jobs:
 
   image:
     name: image
-    # Gates publishing on the tests. Tags do not run branch workflows, so a
-    # separate test workflow would have let a release skip them entirely.
+    # Require tests before image builds, including tag-triggered releases.
     needs: test
     if: github.event_name == 'pull_request' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
@@ -75,8 +74,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Loaded rather than pushed straight away so that the smoke test runs
-      # against the exact image the next step publishes.
+      # Load locally so the smoke test and publish use the same image.
       - name: Build image
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
@@ -90,10 +88,8 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Covers what a build alone cannot: that the binary runs on this
-      # architecture and that the image's own defaults are enough to reach a
-      # serving state with only the two Slack tokens supplied. The tokens are
-      # deliberately invalid, so the bot exits once auth.test stops retrying.
+      # Verify the amd64 image serves health checks with only required tokens.
+      # Invalid tokens make auth.test exit after its retries.
       - name: Smoke test the image
         env:
           IMAGE_REF: ${{ fromJSON(steps.metadata.outputs.json).tags[0] }}
