@@ -92,8 +92,27 @@ var additionalDialOptions = func() []grpc.DialOption {
 	return nil
 }
 
-// SendImage sends image data to the LED display service.
+// SendImageOptions controls image playback while preserving a duration fallback
+// for servers that do not yet support cycle-based scrolling.
+type SendImageOptions struct {
+	DurationSeconds   int32
+	DisplayMode       imagev1.DisplayMode
+	ScrollCycles      uint32
+	MinDisplaySeconds uint32
+}
+
+// SendImage sends image data using duration-based playback.
 func (c *ImageClient) SendImage(ctx context.Context, imageData []byte, mimeType string, displayDurationSeconds int32) (*imagev1.SendImageResponse, error) {
+	return c.SendImageWithOptions(ctx, imageData, mimeType, SendImageOptions{
+		DurationSeconds: displayDurationSeconds,
+	})
+}
+
+// SendImageWithOptions sends image data with explicit playback options.
+func (c *ImageClient) SendImageWithOptions(ctx context.Context, imageData []byte, mimeType string, options SendImageOptions) (*imagev1.SendImageResponse, error) {
+	if options.ScrollCycles == 0 && options.MinDisplaySeconds > 0 {
+		return nil, fmt.Errorf("minimum display seconds requires scroll cycles")
+	}
 	opCtx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 
@@ -102,13 +121,18 @@ func (c *ImageClient) SendImage(ctx context.Context, imageData []byte, mimeType 
 			ImageData: imageData,
 			MimeType:  mimeType,
 		},
-		DurationSeconds: displayDurationSeconds,
+		DurationSeconds:   options.DurationSeconds,
+		DisplayMode:       options.DisplayMode,
+		ScrollCycles:      options.ScrollCycles,
+		MinDisplaySeconds: options.MinDisplaySeconds,
 	}
 
 	c.logger.Debug("Sending image to LED display",
 		slog.String("mime_type", mimeType),
 		slog.Int("size", len(imageData)),
-		slog.Int("display_duration_seconds", int(displayDurationSeconds)),
+		slog.Int("display_duration_seconds", int(options.DurationSeconds)),
+		slog.Uint64("scroll_cycles", uint64(options.ScrollCycles)),
+		slog.Uint64("min_display_seconds", uint64(options.MinDisplaySeconds)),
 	)
 
 	resp, err := c.client.SendImage(opCtx, req)

@@ -134,6 +134,46 @@ func TestSendImageSuccess(t *testing.T) {
 	}
 }
 
+func TestSendImageWithOptionsSendsCycleFields(t *testing.T) {
+	requests := make(chan *imagev1.SendImageRequest, 1)
+	_, lis := startBufconnServer(t, &imageServiceServer{
+		sendImage: func(_ context.Context, req *imagev1.SendImageRequest) (*imagev1.SendImageResponse, error) {
+			requests <- req
+			return &imagev1.SendImageResponse{Success: true, Message: "sent"}, nil
+		},
+	})
+	withDialOptions(t, grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
+		return lis.Dial()
+	}))
+	c, err := NewImageClient("passthrough:///bufnet", time.Second, time.Second, testLogger())
+	if err != nil {
+		t.Fatalf("failed to create client: %v", err)
+	}
+	t.Cleanup(func() { _ = c.Close() })
+
+	_, err = c.SendImageWithOptions(context.Background(), []byte("ppm"), "image/x-portable-pixmap", SendImageOptions{
+		DurationSeconds:   10,
+		DisplayMode:       imagev1.DisplayMode_DISPLAY_MODE_SCROLL,
+		ScrollCycles:      2,
+		MinDisplaySeconds: 5,
+	})
+	if err != nil {
+		t.Fatalf("expected send success, got error: %v", err)
+	}
+	req := <-requests
+	if req.DurationSeconds != 10 || req.DisplayMode != imagev1.DisplayMode_DISPLAY_MODE_SCROLL || req.ScrollCycles != 2 || req.MinDisplaySeconds != 5 {
+		t.Fatalf("unexpected request options: %+v", req)
+	}
+}
+
+func TestSendImageWithOptionsRejectsMinimumWithoutCycles(t *testing.T) {
+	c := &ImageClient{}
+	_, err := c.SendImageWithOptions(context.Background(), nil, "image/png", SendImageOptions{MinDisplaySeconds: 1})
+	if err == nil {
+		t.Fatal("expected invalid options error")
+	}
+}
+
 func TestSendImageReturnsErrorWhenServiceReturnsSuccessFalse(t *testing.T) {
 	_, lis := startBufconnServer(t, &imageServiceServer{
 		sendImage: func(_ context.Context, _ *imagev1.SendImageRequest) (*imagev1.SendImageResponse, error) {

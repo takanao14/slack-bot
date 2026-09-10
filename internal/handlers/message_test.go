@@ -343,6 +343,8 @@ func TestHandleMessageIgnoresOwnPosts(t *testing.T) {
 				nil,
 				nil,
 				10,
+				0,
+				0,
 				time.Hour,
 				time.Hour,
 			)
@@ -361,7 +363,7 @@ func TestHandleAppMentionDoesNotReply(t *testing.T) {
 		}
 	}()
 
-	h := NewMessageHandler(nil, testLogger(), BotIdentity{UserID: "U08R6PTE4LA"}, nil, nil, 10, time.Hour, time.Hour)
+	h := NewMessageHandler(nil, testLogger(), BotIdentity{UserID: "U08R6PTE4LA"}, nil, nil, 10, 0, 0, time.Hour, time.Hour)
 	h.HandleAppMention(context.Background(), &slackevents.AppMentionEvent{
 		Channel: "C5H95KWNP",
 		User:    "U5E3582NN",
@@ -457,6 +459,8 @@ func TestHandleMessageIgnoresUnhandledSubTypes(t *testing.T) {
 				nil,
 				nil,
 				10,
+				0,
+				0,
 				time.Hour,
 				time.Hour,
 			)
@@ -467,7 +471,7 @@ func TestHandleMessageIgnoresUnhandledSubTypes(t *testing.T) {
 }
 
 func TestNewMessageHandlerStoresConfiguredCacheTTLs(t *testing.T) {
-	h := NewMessageHandler(nil, testLogger(), BotIdentity{}, nil, nil, 10, 15*time.Minute, 45*time.Minute)
+	h := NewMessageHandler(nil, testLogger(), BotIdentity{}, nil, nil, 10, 0, 0, 15*time.Minute, 45*time.Minute)
 
 	if h.emojiListCacheTTL != 15*time.Minute {
 		t.Fatalf("expected emoji list cache TTL to be stored, got %v", h.emojiListCacheTTL)

@@ -27,6 +27,8 @@ type Config struct {
 	Debug                   bool
 	Logger                  *slog.Logger
 	LEDImageDurationSeconds int32
+	LEDScrollCycles         uint32
+	LEDMinDisplaySeconds    uint32
 }
 
 // Load loads configuration from environment variables.
@@ -57,6 +59,15 @@ func Load() (*Config, error) {
 	healthAddr := getEnv("SLACK_BOT_HEALTH_ADDR", ":8080")
 	ledAddr := getEnv("SLACK_BOT_LED_ADDR", "localhost:50051")
 	ledImageDurationSeconds := getEnvAsInt32(logger, "SLACK_BOT_LED_IMAGE_DURATION_SECONDS", 10)
+	ledScrollCycles := getEnvAsUint32(logger, "SLACK_BOT_LED_SCROLL_CYCLES", 0)
+	ledMinDisplaySeconds := getEnvAsUint32(logger, "SLACK_BOT_LED_MIN_DISPLAY_SECONDS", 0)
+	if ledScrollCycles == 0 && ledMinDisplaySeconds > 0 {
+		logger.Warn("Minimum display time requires scroll cycles, disabling minimum display time",
+			"key", "SLACK_BOT_LED_MIN_DISPLAY_SECONDS",
+			"value", ledMinDisplaySeconds,
+		)
+		ledMinDisplaySeconds = 0
+	}
 	ledConnectTimeout := getEnvAsDuration(logger, "SLACK_BOT_LED_CONNECT_TIMEOUT_SECONDS", 10*time.Second)
 	ledOperationTimeout := getEnvAsDuration(logger, "SLACK_BOT_LED_OPERATION_TIMEOUT_SECONDS", 30*time.Second)
 	emojiListCacheTTL := getEnvAsDuration(logger, "SLACK_BOT_EMOJI_LIST_CACHE_TTL_SECONDS", defaultEmojiListCacheTTL)
@@ -75,7 +86,23 @@ func Load() (*Config, error) {
 		Debug:                   debug,
 		Logger:                  logger,
 		LEDImageDurationSeconds: ledImageDurationSeconds,
+		LEDScrollCycles:         ledScrollCycles,
+		LEDMinDisplaySeconds:    ledMinDisplaySeconds,
 	}, nil
+}
+
+// getEnvAsUint32 returns a non-negative uint32 environment value or its default.
+func getEnvAsUint32(logger *slog.Logger, key string, defaultValue uint32) uint32 {
+	strValue := getEnv(key, "")
+	if strValue == "" {
+		return defaultValue
+	}
+	intValue, err := strconv.ParseUint(strValue, 10, 32)
+	if err != nil {
+		logger.Warn("Failed to parse environment variable as uint32, using default", "key", key, "value", strValue, "default", defaultValue)
+		return defaultValue
+	}
+	return uint32(intValue)
 }
 
 // getRequiredEnv returns a required environment variable.

@@ -167,6 +167,8 @@ func New(ctx context.Context, cfg *config.Config) (*Bot, error) {
 		text2img,
 		ledClient,
 		cfg.LEDImageDurationSeconds,
+		cfg.LEDScrollCycles,
+		cfg.LEDMinDisplaySeconds,
 		cfg.EmojiListCacheTTL,
 		cfg.EmojiImageCacheTTL,
 	)

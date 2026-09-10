@@ -43,6 +43,8 @@ export SLACK_BOT_FONT_PATH="/path/to/font.ttf"
 export SLACK_BOT_HEALTH_ADDR=":8080"                            # Optional; default: :8080, empty disables
 export SLACK_BOT_LED_ADDR="localhost:50051"                     # Optional; default: localhost:50051
 export SLACK_BOT_LED_IMAGE_DURATION_SECONDS="10"                # Optional; main display seconds, default: 10
+export SLACK_BOT_LED_SCROLL_CYCLES="0"                           # Optional; horizontal cycles, default: 0
+export SLACK_BOT_LED_MIN_DISPLAY_SECONDS="0"                     # Optional; minimum main display seconds, default: 0
 export SLACK_BOT_LED_CONNECT_TIMEOUT_SECONDS="10"               # Optional; seconds, default: 10
 export SLACK_BOT_LED_OPERATION_TIMEOUT_SECONDS="30"             # Optional; seconds, default: 30
 export SLACK_BOT_EMOJI_LIST_CACHE_TTL_SECONDS="86400"           # Optional; seconds, default: 24h
@@ -127,6 +129,12 @@ Both custom Slack emojis and Unicode emojis are supported.
 `SLACK_BOT_LED_IMAGE_DURATION_SECONDS` controls the main image display time. It
 does not include server-side eye-catch playback, decoding, or display preparation;
 the LED service's overall worker timeout may still cap the display time.
+Set `SLACK_BOT_LED_SCROLL_CYCLES` to a positive value to request cycle-based
+scrolling, and optionally set `SLACK_BOT_LED_MIN_DISPLAY_SECONDS`. The duration
+remains in the request as a fallback for older LED servers. New servers ignore
+that duration when cycles are enabled and stop only after both cycle and minimum
+time conditions are satisfied, unless the worker timeout or shutdown interrupts
+playback.
 
 ## HTTP Endpoints
 

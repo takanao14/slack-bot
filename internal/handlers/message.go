@@ -25,6 +25,7 @@ import (
 	"github.com/enescakir/emoji"
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
+	imagev1 "github.com/takanao14/led-image-api/gen/go/image/v1"
 )
 
 // BotIdentity contains auth.test IDs used to detect the bot's posts.
@@ -40,6 +41,8 @@ type MessageHandler struct {
 	text2img           *slackbotimage.Text2Image
 	ledClient          *ledclient.ImageClient
 	imageDuration      int32
+	scrollCycles       uint32
+	minDisplaySeconds  uint32
 	emojiCache         map[string]emojiCacheEntry
 	emojiListCache     map[string]string
 	emojiListFetchedAt time.Time
@@ -69,6 +72,8 @@ func NewMessageHandler(
 	text2img *slackbotimage.Text2Image,
 	ledClient *ledclient.ImageClient,
 	imageDuration int32,
+	scrollCycles uint32,
+	minDisplaySeconds uint32,
 	emojiListCacheTTL time.Duration,
 	emojiImageCacheTTL time.Duration,
 ) *MessageHandler {
@@ -79,6 +84,8 @@ func NewMessageHandler(
 		text2img:           text2img,
 		ledClient:          ledClient,
 		imageDuration:      imageDuration,
+		scrollCycles:       scrollCycles,
+		minDisplaySeconds:  minDisplaySeconds,
 		emojiCache:         make(map[string]emojiCacheEntry),
 		emojiListCache:     nil,
 		emojiListFetchedAt: time.Time{},
@@ -266,12 +273,21 @@ func (h *MessageHandler) processMessageImage(ctx context.Context, text string) e
 		}
 
 		// Keep application metrics out of the public LED client package.
+		displayMode := imagev1.DisplayMode_DISPLAY_MODE_UNSPECIFIED
+		if h.scrollCycles > 0 {
+			displayMode = imagev1.DisplayMode_DISPLAY_MODE_SCROLL
+		}
 		sendStart := time.Now()
-		_, sendErr := h.ledClient.SendImage(
+		_, sendErr := h.ledClient.SendImageWithOptions(
 			ctx,
 			imageData,
 			"image/x-portable-pixmap",
-			h.imageDuration,
+			ledclient.SendImageOptions{
+				DurationSeconds:   h.imageDuration,
+				DisplayMode:       displayMode,
+				ScrollCycles:      h.scrollCycles,
+				MinDisplaySeconds: h.minDisplaySeconds,
+			},
 		)
 		metrics.ObserveLEDSend(time.Since(sendStart), sendErr)
 		if sendErr != nil {

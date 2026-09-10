@@ -178,3 +178,49 @@ func TestLoadFallsBackToDefaultImageDurationOnInvalidInput(t *testing.T) {
 		t.Errorf("expected default LEDImageDurationSeconds 10 when env var is invalid, got %d", cfg.LEDImageDurationSeconds)
 	}
 }
+
+func TestLoadReadsScrollOptions(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("SLACK_BOT_LED_SCROLL_CYCLES", "2")
+	t.Setenv("SLACK_BOT_LED_MIN_DISPLAY_SECONDS", "5")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("expected config to load, got error: %v", err)
+	}
+	if cfg.LEDScrollCycles != 2 || cfg.LEDMinDisplaySeconds != 5 {
+		t.Fatalf("unexpected scroll options: cycles=%d minimum=%d", cfg.LEDScrollCycles, cfg.LEDMinDisplaySeconds)
+	}
+}
+
+func TestLoadRejectsInvalidScrollOptions(t *testing.T) {
+	for _, value := range []string{"-1", "bad", "4294967296"} {
+		t.Run(value, func(t *testing.T) {
+			setRequiredEnv(t)
+			t.Setenv("SLACK_BOT_LED_SCROLL_CYCLES", value)
+			t.Setenv("SLACK_BOT_LED_MIN_DISPLAY_SECONDS", value)
+
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("expected config to load, got error: %v", err)
+			}
+			if cfg.LEDScrollCycles != 0 || cfg.LEDMinDisplaySeconds != 0 {
+				t.Fatalf("expected invalid values to fall back to zero, got cycles=%d minimum=%d", cfg.LEDScrollCycles, cfg.LEDMinDisplaySeconds)
+			}
+		})
+	}
+}
+
+func TestLoadDisablesMinimumWithoutCycles(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("SLACK_BOT_LED_SCROLL_CYCLES", "0")
+	t.Setenv("SLACK_BOT_LED_MIN_DISPLAY_SECONDS", "5")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("expected config to load, got error: %v", err)
+	}
+	if cfg.LEDMinDisplaySeconds != 0 {
+		t.Fatalf("expected minimum display time to be disabled, got %d", cfg.LEDMinDisplaySeconds)
+	}
+}
