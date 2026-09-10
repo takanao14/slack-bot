@@ -18,7 +18,8 @@ FROM debian:trixie-slim AS font
 
 # BIZ UDGothic is a universal design font designed for readability even at small sizes, and is used for
 # 32-pixel LED matrices.
-# Font and license files are stored in the release archive.ARG FONT_VERSION=v1.051
+# Font and license files are stored in the release archive.
+ARG FONT_VERSION=v1.051
 ARG FONT_FILE=BIZUDPGothic-Regular.ttf
 ARG FONT_SHA256=30692df621b92df13b88f1360aed1ab6ae50de441bce751a396c6439045cd759
 ARG LICENSE_SHA256=e753d7155d53c747d037a445e584c8ecfca6dd79846db610417e282a736b28bc
