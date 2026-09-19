@@ -8,7 +8,7 @@ require (
 	github.com/slack-go/slack v0.29.0
 	github.com/takanao14/led-image-api v0.2.0
 	golang.org/x/image v0.46.0
-	google.golang.org/grpc v1.83.2
+	google.golang.org/grpc v1.84.0
 )
 
 require (
