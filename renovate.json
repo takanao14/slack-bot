@@ -29,21 +29,20 @@
       "description": "led-image-api carries the gRPC bindings shared with led-service2, so a bump must be checked against the version actually deployed on the device.",
       "matchManagers": ["gomod"],
       "matchPackageNames": ["github.com/takanao14/led-image-api"],
-      "labels": ["dependencies", "renovate", "manual-review", "led-api"]
+      "addLabels": ["led-api"]
     },
     {
       "description": "The bundled display font is pinned by two SHA-256 checksums Renovate cannot recompute, so the version bump alone leaves the build failing until they are refreshed.",
       "matchPackageNames": ["googlefonts/morisawa-biz-ud-gothic"],
-      "labels": ["dependencies", "renovate", "manual-review", "font"],
+      "addLabels": ["font"],
       "prBodyNotes": [
         "Refresh `FONT_SHA256` and `LICENSE_SHA256` in the `Dockerfile` before merging. `docker build` fails on a mismatch, so an unrefreshed bump cannot reach the registry."
       ]
     },
     {
-      "description": "Never auto-merge major updates.",
+      "description": "Mark major updates for manual review.",
       "matchUpdateTypes": ["major"],
-      "automerge": false,
-      "labels": ["dependencies", "renovate", "manual-review", "major-update"]
+      "addLabels": ["major-update"]
     }
   ],
   "customManagers": [
