@@ -164,6 +164,29 @@ The bot emits JSON logs with `log/slog`:
 
 ## Development
 
+### Pull Requests and Releases
+
+All updates to `main`, including dependency updates from bots, must go through a
+pull request. The `protect-main` ruleset requires the GitHub Actions checks named
+`test` and `image`, with no required approvals and no bypass actors. Deletion and
+force pushes remain prohibited. Branches must be up to date with `main` before
+merging so the required checks validate the current base.
+
+CI runs on every pull request without path filters. `test` checks formatting,
+runs `go vet`, and runs tests with the race detector. After `test` succeeds,
+`image` builds the container and checks `/healthz`; pull requests do not publish
+images. A failed `test` blocks merging even when its dependent `image` job is
+skipped. Keep these check names stable when editing CI.
+
+Releases continue to use `v*` tags. Tag-triggered CI runs the tests, builds and
+smoke-tests the image, and only then publishes it. Merging a pull request does
+not publish an image or deploy it.
+
+Before merging any `github.com/takanao14/led-image-api` update, confirm the API
+version actually deployed on the LED device and check compatibility with that
+version. Passing CI alone does not establish device compatibility; retain this
+manual check for dependency updates labeled `led-api`.
+
 ### Adding a New Handler
 
 To add an event handler:
